@@ -1,8 +1,7 @@
 // Configuración pública que GitHub Pages sirve tal cual.
-// Vacía a propósito: sin estas cadenas el álbum se queda en este navegador.
-// La clave publicable de Clerk y la URL de la API se pegan aquí solo al publicar.
-// En local, config.local.js (no se sube a git) puede rellenar la clave publicable.
+// La clave de Clerk es la publicable. La secreta no va aquí.
+// En local, config.local.js (no se sube a git) puede sustituir la URL de la API.
 window.ALBUM_CONFIG = {
-  clerkPublishableKey: "",
-  apiBase: ""
+  clerkPublishableKey: "pk_test_bGlrZWQtZG9iZXJtYW4tMzkxOC5jbGVyay5hY2NvdW50cy5kZXYk",
+  apiBase: "https://album-pokemon-api.onrender.com"
 };

@@ -34,7 +34,7 @@ Escucha en `0.0.0.0` y en el puerto de `PORT` (en local, 8787). `GET /` responde
 | `config.js` (sí se sube, es la web pública) | La misma clave **publicable** de Clerk y la URL pública de Render, sin barra final |
 | Clerk, orígenes permitidos | El origen de GitHub Pages, el mismo valor que `PAGES_ORIGIN` |
 
-`PAGES_ORIGIN` es solo el origen, por ejemplo `https://tu-usuario.github.io`. Sin ruta y sin barra final. En local puede ser `http://127.0.0.1:43123`.
+`PAGES_ORIGIN` es solo el origen, sin ruta y sin barra final: `https://almuoluupv.github.io`. La web vive en `https://almuoluupv.github.io/EverPlayDeckTCG/`, pero el origen que Render debe aceptar no incluye `/EverPlayDeckTCG`. En local puede ser `http://127.0.0.1:43123`.
 
 `MONGODB_URI` es la cadena de Atlas del clúster. En Network Access de Atlas permite `0.0.0.0/0`: el plan gratuito de Render no tiene una IP fija de salida. La API guarda el álbum en la base `album`, colección `albums`, como `{ cardId, qty }`.
 
