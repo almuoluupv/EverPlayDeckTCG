@@ -517,7 +517,7 @@ const state = {
     roiNum: { x: 0.55, y: 0.82, w: 0.32, h: 0.10 },
     roiDragging: false,
     roiNumDragging: false,
-    photo: { image:null, status:'idle', guess:'', results:[] }
+    photo: { image:null, status:'idle', guess:'', results:[], detail:'' }
   },
   search: { query:'', results:[], status:'idle' },
   sortMode: 'expansion', // 'expansion' | 'price-desc' | 'price-asc'
@@ -1177,28 +1177,43 @@ function hammingDistance(a, b){
  * @param {number} topN              Cuántos candidatos devolver (default 5)
  * @param {number} maxDist           Distancia máxima para incluir (default 25)
  */
-async function findByPhash(canvas, topN=5, maxDist=25){
-  const index  = await ensurePhash();
-  const cards  = await ensureGlobalIndex();
+let phashGroupsPromise = null;
+async function phashGroups(){
+  if(phashGroupsPromise) return phashGroupsPromise;
+  phashGroupsPromise = (async () => {
+    const index = await ensurePhash();
+    const cards = await ensureGlobalIndex();
+    const idToSet = new Map(cards.map(c => [c.id, c.setId]));
+    const groups = new Map();
+    for(const [id, hash] of Object.entries(index)){
+      const setId = idToSet.get(id) || '';
+      let list = groups.get(setId);
+      if(!list){ list = []; groups.set(setId, list); }
+      list.push([id, hash]);
+    }
+    return { index, groups };
+  })();
+  return phashGroupsPromise;
+}
+
+async function findByPhash(canvas, topN=5, maxDist=25, setId=''){
+  const { index, groups } = await phashGroups();
   const nHashes = Object.keys(index).length;
-  if(nHashes < 100) return [];  // índice vacío o muy pequeño, no usar
+  if(nHashes < 100) return [];
 
+  const entries = setId ? (groups.get(setId) || []) : Object.entries(index);
+  if(!entries.length) return [];
+
+  const cards = await ensureGlobalIndex();
   const queryHash = computePhashFromCanvas(canvas);
-
-  // Comparar contra todos los hashes
   const results = [];
-  for(const [id, hash] of Object.entries(index)){
+  for(const [id, hash] of entries){
     const d = hammingDistance(queryHash, hash);
     if(d <= maxDist) results.push({ id, distance: d });
   }
-
-  // Ordenar por distancia y tomar top N
   results.sort((a,b) => a.distance - b.distance);
-  const top = results.slice(0, topN);
-
-  // Resolver IDs a objetos de carta
   const cardMap = new Map(cards.map(c=>[c.id,c]));
-  return top
+  return results.slice(0, topN)
     .map(r => ({ card: cardMap.get(r.id), distance: r.distance }))
     .filter(r => r.card);
 }
@@ -1319,139 +1334,6 @@ async function matchByNumberAndSet(fractions, setId){
   return results;
 }
 
-/* ── Rareza por posición numérica ──────────────────────────────────────────
-   Las cartas TCG SV se ordenan así dentro de cada set:
-     n ≤ setTotal          → common / uncommon / rare / double rare
-     setTotal < n ≤ total+~60  → ultra rare (full-art ex, supporter full-art)
-     n > setTotal+60       → illustration rare / special illustration / hyper rare
-   Devuelve: 'regular' | 'ultra' | 'secret'
-*/
-function rarityTierFromNumber(cardNumber, setTotal){
-  const n = parseInt(String(cardNumber).replace(/\D/g,''), 10);
-  const t = parseInt(setTotal, 10);
-  if(isNaN(n) || isNaN(t) || t === 0) return 'unknown';
-  if(n <= t) return 'regular';
-  if(n <= t + 65) return 'ultra';
-  return 'secret';
-}
-
-/* ── Color dominante desde canvas ──────────────────────────────────────────
-   Analiza la zona superior-izquierda del frame (donde está el símbolo de
-   tipo en las cartas SV) y devuelve el matiz dominante (0-360) y la
-   saturación media. Menos de 300ms en móvil moderno.
-   
-   Tipos SV → rango de matiz dominante del fondo de la carta:
-     grass      80-140   fire       5-35    water     185-225
-     lightning  40-65    psychic   285-340  fighting   10-35
-     metal     185-220   dragon    230-275  darkness  (bajo sat.)
-     colorless (bajo sat. / muy claro)
-*/
-function dominantHueFromCanvas(canvas){
-  try {
-    const W = canvas.width, H = canvas.height;
-    // Solo analizar la mitad izquierda y el tercio superior (zona del tipo)
-    const ctx = canvas.getContext('2d', {willReadFrequently: true});
-    const x0=0, y0=0, w=Math.floor(W*0.5), h=Math.floor(H*0.35);
-    const px = ctx.getImageData(x0, y0, w, h).data;
-    
-    // Acumular hue con peso por saturación
-    const bins = new Float32Array(36); // 10° por bin
-    for(let i=0; i<px.length; i+=4){
-      const r=px[i]/255, g=px[i+1]/255, b=px[i+2]/255;
-      const cmax=Math.max(r,g,b), cmin=Math.min(r,g,b), delta=cmax-cmin;
-      if(delta < 0.18 || cmax < 0.15 || cmax > 0.95) continue; // skip gray/black/white
-      const sat = delta/cmax;
-      let hue=0;
-      if(cmax===r) hue=60*((g-b)/delta%6);
-      else if(cmax===g) hue=60*((b-r)/delta+2);
-      else hue=60*((r-g)/delta+4);
-      if(hue<0) hue+=360;
-      bins[Math.floor(hue/10)%36] += sat; // peso = saturación
-    }
-    
-    // Suavizar bins (ventana 3) para reducir ruido
-    const smooth = new Float32Array(36);
-    for(let i=0;i<36;i++) smooth[i]=(bins[(i+35)%36]+bins[i]*2+bins[(i+1)%36])/4;
-    
-    const peakBin = smooth.indexOf(Math.max(...smooth));
-    const totalWeight = smooth.reduce((a,b)=>a+b,0);
-    const dominantHue = peakBin * 10 + 5;
-    const confidence = totalWeight > 50 ? Math.min(1, smooth[peakBin]/totalWeight*3) : 0;
-    
-    return { hue: dominantHue, confidence };
-  } catch(e) {
-    return { hue: 0, confidence: 0 };
-  }
-}
-
-/* Mapea un matiz a una lista de tipos posibles con puntuación 0-1 */
-function hueToTypeScores(hue, confidence){
-  if(confidence < 0.15) return {}; // señal demasiado débil
-  const TYPE_RANGES = {
-    grass:      [[80,140]],
-    fire:       [[5,35],[345,360],[0,5]],
-    water:      [[185,225]],
-    lightning:  [[40,65]],
-    psychic:    [[285,345]],
-    fighting:   [[10,38]],
-    metal:      [[185,220]],
-    dragon:     [[230,275]],
-  };
-  const scores = {};
-  for(const [type, ranges] of Object.entries(TYPE_RANGES)){
-    let best = 0;
-    for(const [lo,hi] of ranges){
-      const mid=(lo+hi)/2, half=(hi-lo)/2+20;
-      let diff=Math.abs(hue-mid);
-      if(diff>180) diff=360-diff;
-      best=Math.max(best, Math.max(0,1-diff/half));
-    }
-    if(best > 0.1) scores[type] = best * confidence;
-  }
-  return scores;
-}
-
-/* ── Scoring combinado ─────────────────────────────────────────────────────
-   Puntúa una carta candidata según las señales disponibles.
-   NUNCA elimina candidatos, solo reordena.
-   Máximo de bonus: +3 por rareza + +2 por tipo = +5 sobre la puntuación base.
-   La puntuación base del número coincidente ya es 10, así que el bonus
-   representa como máximo un 33% del total — suficiente para desempatar
-   pero no para tapar errores de número.
-*/
-function applySignalBonus(cards, signals){
-  const { rarityHint, typeScores } = signals;
-  if(!rarityHint && !Object.keys(typeScores||{}).length) return cards;
-  
-  return cards.map(c => {
-    let bonus = 0;
-    const n = parseInt(String(c.number||'').replace(/\D/g,''),10);
-    const t = c.setTotal;
-    
-    // Bonus de rareza: solo si la señal coincide
-    if(rarityHint){
-      const tier = rarityTierFromNumber(n, t);
-      if(tier === rarityHint) bonus += 3;
-      else if(tier !== 'unknown' && rarityHint !== 'unknown') bonus -= 1; // penalización suave
-    }
-    
-    // Bonus de tipo: requiere que el nombre del Pokémon encaje con los colores detectados
-    // No tenemos el tipo en el catálogo, pero podemos inferirlo del orden numérico
-    // → este bonus es puramente por color, aplicamos el score máximo del tipo
-    if(typeScores && Object.keys(typeScores).length > 0){
-      // Sin info de tipo en catálogo, el bonus de color es estático
-      // Pero podemos al menos distinguir: si la carta es "ex" (double rare),
-      // su fondo tiene el color del tipo del Pokémon. Las cartas regulares también.
-      // Aplicar un bonus pequeño basado en confianza general del color detectado
-      const maxScore = Math.max(...Object.values(typeScores));
-      if(maxScore > 0.6) bonus += 1; // confianza alta en el color
-      else if(maxScore > 0.35) bonus += 0.5;
-    }
-    
-    return { ...c, _bonus: bonus };
-  }).sort((a,b) => (b._bonus||0) - (a._bonus||0) || 0);
-}
-
 function extractNumberFraction(text){
   // Correcciones OCR comunes en dígitos
   let t = String(text||'')
@@ -1556,26 +1438,41 @@ function escapeHtml(value){
   return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
-function guessNameFromText(text){
-  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
-  for(const line of lines.slice(0,6)){
-    const cleaned = line.replace(/[^A-Za-zÀ-ÿ'’\- ]/g,'').trim();
-    if(cleaned.length >= 3 && cleaned.length <= 24) return cleaned;
-  }
-  return '';
+function loadCanvasFromDataUrl(dataUrl){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      resolve(canvas);
+    };
+    img.onerror = () => reject(new Error('Imagen no válida'));
+    img.src = dataUrl;
+  });
+}
+
+function cropRatioCanvas(src, rx, ry, rw, rh, { scaleUp=false } = {}){
+  const sx = Math.max(0, Math.round(src.width * rx));
+  const sy = Math.max(0, Math.round(src.height * ry));
+  const sw = Math.max(1, Math.min(src.width - sx, Math.round(src.width * rw)));
+  const sh = Math.max(1, Math.min(src.height - sy, Math.round(src.height * rh)));
+  const scale = scaleUp ? Math.max(4, Math.min(8, 3600 / Math.max(sw, sh))) : 1;
+  const dst = document.createElement('canvas');
+  dst.width = Math.max(1, Math.round(sw * scale));
+  dst.height = Math.max(1, Math.round(sh * scale));
+  const ctx = dst.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, sx, sy, sw, sh, 0, 0, dst.width, dst.height);
+  return dst;
 }
 
 const RECOGNITION_LANGUAGE_SUFFIXES = new Set(['EN','ES','FR','DE','IT','PT','JA','KO','ZH','TH','ID','RU','NL','PL']);
 let recognitionCatalogPromise = null;
 let recognitionCatalog = null;
 let liveScanTimer = null;
-let liveStableCandidateId = '';
-let liveStableCount = 0;
-let liveStableScore = 0;
-const LIVE_SCAN_INTERVAL_MS = 320;
-const LIVE_CONFIRM_STREAK = 3;
-const LIVE_CONFIRM_SCORE = 0.88;
-const LIVE_AUTO_LOCK_MS = 1800;
 
 function normalizeRecognitionSetCode(value){
   const cleaned = String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -1646,7 +1543,8 @@ async function ensureRecognitionCatalog(){
       const setCodes = [];
       const seen = new Set();
       for(const card of index){
-        const setCode = normalizeRecognitionSetCode(card.setId);
+        const setCode = String(card.setId || '');
+        if(!setCode) continue;
         if(!bySetCode.has(setCode)) bySetCode.set(setCode, []);
         bySetCode.get(setCode).push(card);
         if(!seen.has(setCode)){
@@ -1666,14 +1564,14 @@ function extractRecognitionSignals(text){
   const out = [];
   const seen = new Set();
   const push = (setCode, number, total, rawLine) => {
-    const normalizedSetCode = normalizeRecognitionSetCode(setCode);
+    const rawSet = String(setCode || '').trim();
     const normalizedNumber = normalizeRecognitionCardNumber(number);
     const normalizedTotal = parseInt(total, 10);
     if(!normalizedNumber || !Number.isFinite(normalizedTotal)) return;
-    const key = `${normalizedSetCode}|${normalizedNumber}|${normalizedTotal}`;
+    const key = `${rawSet}|${normalizedNumber}|${normalizedTotal}`;
     if(seen.has(key)) return;
     seen.add(key);
-    out.push({ setCode: normalizedSetCode, number: normalizedNumber, total: normalizedTotal, rawLine });
+    out.push({ setCode: rawSet, number: normalizedNumber, total: normalizedTotal, rawLine });
   };
 
   for(const originalLine of lines){
@@ -1681,26 +1579,18 @@ function extractRecognitionSignals(text){
     if(!line) continue;
 
     for(const match of line.matchAll(/(\d{1,3}[A-Za-z]?)\s*\/\s*(\d{1,3})/g)){
-      const before = line.slice(0, match.index).trim();
-      const tokens = before.split(/\s+/).filter(Boolean);
-      let setToken = tokens.length ? tokens[tokens.length - 1] : '';
-      if(tokens.length >= 2 && /^\d+$/.test(tokens[tokens.length - 1])) setToken = tokens[tokens.length - 2];
-      push(setToken, match[1], match[2], originalLine);
+      push(line.slice(0, match.index).trim(), match[1], match[2], originalLine);
     }
 
     for(const match of line.matchAll(/(\d{1,3}[A-Za-z]?)\s{1,3}(\d{1,3})/g)){
-      const before = line.slice(0, match.index).trim();
-      const tokens = before.split(/\s+/).filter(Boolean);
-      let setToken = tokens.length ? tokens[tokens.length - 1] : '';
-      if(tokens.length >= 2 && /^\d+$/.test(tokens[tokens.length - 1])) setToken = tokens[tokens.length - 2];
-      push(setToken, match[1], match[2], originalLine);
+      push(line.slice(0, match.index).trim(), match[1], match[2], originalLine);
     }
   }
 
   return out;
 }
 
-function queueLiveRecognitionFrame(delay = LIVE_SCAN_INTERVAL_MS){
+function queueLiveRecognitionFrame(delay = 3000){
   if(liveScanTimer){
     clearTimeout(liveScanTimer);
     liveScanTimer = null;
@@ -1712,12 +1602,6 @@ function queueLiveRecognitionFrame(delay = LIVE_SCAN_INTERVAL_MS){
   }, Math.max(0, delay));
 }
 
-function resetLiveRecognitionStability(){
-  liveStableCandidateId = '';
-  liveStableCount = 0;
-  liveStableScore = 0;
-}
-
 function maybeNormalizeRecognitionResult(result){
   return {
     card: result.card,
@@ -1725,6 +1609,17 @@ function maybeNormalizeRecognitionResult(result){
     signal: result.signal,
     key: result.card.id
   };
+}
+
+function setIdFromPrintedToken(token){
+  const raw = String(token || '').trim();
+  if(!raw) return { setId: '', fuzzy: false };
+  const direct = extractSetCode(raw);
+  if(direct) return { setId: direct, fuzzy: false };
+  const cleaned = normalizeRecognitionSetCode(raw);
+  const closest = resolveClosestSetCode(cleaned, Object.keys(SET_CODE_MAP));
+  if(!closest) return { setId: '', fuzzy: false };
+  return { setId: SET_CODE_MAP[closest], fuzzy: closest !== cleaned };
 }
 
 async function findRecognitionCandidates(signals){
@@ -1745,61 +1640,19 @@ async function findRecognitionCandidates(signals){
   };
 
   for(const signal of signals){
-    if(signal.setCode){
-      const exactCards = catalog.bySetCode.get(signal.setCode) || [];
+    const printed = setIdFromPrintedToken(signal.setCode);
+    if(printed.setId){
+      const exactCards = catalog.bySetCode.get(printed.setId) || [];
+      const score = printed.fuzzy ? 0.86 : 0.96;
       for(const card of exactCards){
         if(normalizeRecognitionCardNumber(card.number) === signal.number){
-          push(card, 0.96, signal);
-        }
-      }
-
-      const fuzzySetCode = resolveClosestSetCode(signal.setCode, catalog.setCodes);
-      if(fuzzySetCode && fuzzySetCode !== signal.setCode){
-        const fuzzyCards = catalog.bySetCode.get(fuzzySetCode) || [];
-        for(const card of fuzzyCards){
-          if(normalizeRecognitionCardNumber(card.number) === signal.number){
-            push(card, 0.86, signal);
-          }
-        }
-      }
-    }
-
-    if(signal.total && signal.number){
-      const numericNumber = parseInt(signal.number, 10);
-      if(Number.isFinite(numericNumber)){
-        const fractionMatches = await matchByNumberFraction([{ number: numericNumber, total: signal.total }]).catch(() => []);
-        for(const card of fractionMatches){
-          push(card, signal.setCode ? 0.72 : 0.62, signal);
+          push(card, score, signal);
         }
       }
     }
   }
 
   return candidates.sort((a, b) => b.score - a.score || naturalCardSort(a.card, b.card)).map(maybeNormalizeRecognitionResult);
-}
-
-function shouldAutoConfirmCandidate(candidate, streak){
-  if(!candidate) return false;
-  if(candidate.score >= 0.94 && streak >= 2) return true;
-  if(candidate.score >= LIVE_CONFIRM_SCORE && streak >= LIVE_CONFIRM_STREAK) return true;
-  return false;
-}
-
-async function runOCR(dataUrl){
-  const { data } = await Tesseract.recognize(dataUrl, 'eng', { logger: ()=>{} });
-  return data.text || '';
-}
-
-async function ocrRecognitionCanvas(canvas){
-  if(!ocrWorker || !canvas?.width || !canvas?.height) return '';
-  const image = canvas.toDataURL('image/jpeg', 0.98);
-  await ocrWorker.setParameters({
-    tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz/.- ',
-    tessedit_pageseg_mode: '7',
-    user_defined_dpi: '320'
-  });
-  const result = await ocrWorker.recognize(image);
-  return result?.data?.text || '';
 }
 
 /* ---------- cámara en vivo ---------- */
@@ -1818,7 +1671,6 @@ async function startLiveScan(){
   state.scan.liveError = '';
   state.scan.suggestions = [];
   state.scan.cooldownUntil = 0;
-  resetLiveRecognitionStability();
   state.scan.zoom = 1;
   state.scan.zoomMin = 1;
   state.scan.zoomMax = 3;
@@ -2004,6 +1856,18 @@ function attachRoiDrag(){
   makeResizable(document.getElementById('roiNumResize'), ()=>state.scan.roiNum, s=>{ state.scan.roiNum=s; }, 0.06, 0.04);
 }
 
+async function ensureOcrWorker(){
+  if(ocrWorker) return ocrWorker;
+  if(typeof Tesseract==='undefined') throw new Error('Tesseract.js no está cargado');
+  ocrWorker = await Tesseract.createWorker('eng', 1, { logger: info => {
+    if(!state.scan.liveActive || info?.progress == null || !info.status) return;
+    state.scan.liveMessage = `${info.status} ${Math.round(info.progress * 100)}%`;
+    const statusEl = document.getElementById('liveStatusText');
+    if(statusEl) statusEl.textContent = state.scan.liveMessage;
+  }});
+  return ocrWorker;
+}
+
 async function beginLiveRecognition(){
   if(!state.scan.liveActive) return;
   state.scan.livePhase='scanning';
@@ -2012,19 +1876,11 @@ async function beginLiveRecognition(){
   state.scan.liveText=''; state.scan.liveError=''; state.scan.suggestions=[];
   render();
   attachRoiDrag();
-  if(!ocrWorker){
-    try{
-      if(typeof Tesseract==='undefined') throw new Error('Tesseract.js no está cargado');
-      ocrWorker=await Tesseract.createWorker('eng',1,{logger:info=>{
-        if(info?.progress!=null && info.status){
-          state.scan.liveMessage=`${info.status} ${Math.round(info.progress*100)}%`;
-          const statusEl=document.getElementById('liveStatusText'); if(statusEl) statusEl.textContent=state.scan.liveMessage;
-        }
-      }});
-    }catch(e){
-      console.error(e); ocrWorker=null; state.scan.liveStatus='error'; state.scan.livePhase='adjust';
-      state.scan.liveError='No se pudo cargar el motor OCR. Comprueba tu conexión a Internet y recarga la página.'; render(); return;
-    }
+  try{
+    await ensureOcrWorker();
+  }catch(e){
+    console.error(e); ocrWorker=null; state.scan.liveStatus='error'; state.scan.livePhase='adjust';
+    state.scan.liveError='No se pudo cargar el motor OCR. Comprueba tu conexión a Internet y recarga la página.'; render(); return;
   }
   state.scan.liveMessage='Listo. Ajusta los recuadros y pulsa Capturar.';
   render();
@@ -2035,7 +1891,6 @@ function stopLiveScan(){
   if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
   mediaStream=null; cameraTrack=null; liveBusy=false;
   if(liveScanTimer){ clearTimeout(liveScanTimer); liveScanTimer = null; }
-  resetLiveRecognitionStability();
   state.scan.liveActive=false; state.scan.livePhase='idle'; state.scan.liveStatus='idle';
   state.scan.liveMessage='Cámara detenida'; state.scan.liveError=''; state.scan.suggestions=[];
   render();
@@ -2135,28 +1990,40 @@ function preprocessForOCR(srcCanvas){
 }
 
 
-function captureRoiCanvas(video, roi){
+function cropVideoCanvas(video, roi, { scaleUp=true } = {}){
   if(!roi) roi=state.scan.roi;
-  const vw=video.videoWidth,vh=video.videoHeight;
+  const vw=video.videoWidth, vh=video.videoHeight;
   const display=getVideoSourceRect(video);
   const box={x:roi.x*video.clientWidth,y:roi.y*video.clientHeight,w:roi.w*video.clientWidth,h:roi.h*video.clientHeight};
-  const ix=Math.max(box.x,display.left),iy=Math.max(box.y,display.top);
-  const ax=Math.min(box.x+box.w,display.left+display.width),ay=Math.min(box.y+box.h,display.top+display.height);
+  const ix=Math.max(box.x,display.left), iy=Math.max(box.y,display.top);
+  const ax=Math.min(box.x+box.w,display.left+display.width), ay=Math.min(box.y+box.h,display.top+display.height);
   const sx=Math.max(0,Math.round((ix-display.left)/display.width*vw));
   const sy=Math.max(0,Math.round((iy-display.top)/display.height*vh));
   const sw=Math.max(1,Math.min(vw-sx,Math.round((ax-ix)/display.width*vw)));
   const sh=Math.max(1,Math.min(vh-sy,Math.round((ay-iy)/display.height*vh)));
-  // Escalar al menos 4× para dar píxeles suficientes al OCR en zonas pequeñas
-  const scale=Math.max(4,Math.min(8,3600/Math.max(sw,sh)));
-  const raw=document.createElement('canvas'); raw.width=Math.round(sw*scale); raw.height=Math.round(sh*scale);
+  const scale=scaleUp ? Math.max(4,Math.min(8,3600/Math.max(sw,sh))) : 1;
+  const raw=document.createElement('canvas');
+  raw.width=Math.max(1,Math.round(sw*scale));
+  raw.height=Math.max(1,Math.round(sh*scale));
   const rctx=raw.getContext('2d',{willReadFrequently:true});
   rctx.imageSmoothingEnabled=true; rctx.imageSmoothingQuality='high';
   rctx.drawImage(video,sx,sy,sw,sh,0,0,raw.width,raw.height);
-  return preprocessForOCR(raw);
+  return raw;
 }
 
-/* ocrCanvas — configurable por psm y whitelist */
-async function ocrCanvas(canvas, { psmMode='6', whitelist=null } = {}){
+function captureRoiCanvas(video, roi){
+  return preprocessForOCR(cropVideoCanvas(video, roi));
+}
+
+/* Una sola cola: el worker de Tesseract no admite recognize en paralelo. */
+let ocrQueue = Promise.resolve();
+function ocrCanvas(canvas, options){
+  const job = ocrQueue.then(() => ocrCanvasNow(canvas, options));
+  ocrQueue = job.then(() => {}, () => {});
+  return job;
+}
+
+async function ocrCanvasNow(canvas, { psmMode='6', whitelist=null } = {}){
   if(!ocrWorker || !canvas?.width || !canvas?.height) return '';
   const image = canvas.toDataURL('image/png');
   const params = { tessedit_pageseg_mode: psmMode, user_defined_dpi: '400' };
@@ -2185,27 +2052,157 @@ function canvasGrayscaleOnly(srcCanvas){
   return dst;
 }
 
-/* captureRawCanvas — captura el ROI en gris SIN preprocessForOCR */
+/* captureRawCanvas — captura el ROI en gris SIN binarizar */
 function captureRawCanvas(video, roi){
-  if(!roi) roi=state.scan.roi;
-  const vw=video.videoWidth, vh=video.videoHeight;
-  const display=getVideoSourceRect(video);
-  const box={x:roi.x*video.clientWidth,y:roi.y*video.clientHeight,w:roi.w*video.clientWidth,h:roi.h*video.clientHeight};
-  const ix=Math.max(box.x,display.left), iy=Math.max(box.y,display.top);
-  const ax=Math.min(box.x+box.w,display.left+display.width), ay=Math.min(box.y+box.h,display.top+display.height);
-  const sx=Math.max(0,Math.round((ix-display.left)/display.width*vw));
-  const sy=Math.max(0,Math.round((iy-display.top)/display.height*vh));
-  const sw=Math.max(1,Math.min(vw-sx,Math.round((ax-ix)/display.width*vw)));
-  const sh=Math.max(1,Math.min(vh-sy,Math.round((ay-iy)/display.height*vh)));
-  const scale=Math.max(4,Math.min(8,3600/Math.max(sw,sh)));
-  const raw=document.createElement('canvas'); raw.width=Math.round(sw*scale); raw.height=Math.round(sh*scale);
-  const rctx=raw.getContext('2d',{willReadFrequently:true});
-  rctx.imageSmoothingEnabled=true; rctx.imageSmoothingQuality='high';
-  rctx.drawImage(video,sx,sy,sw,sh,0,0,raw.width,raw.height);
-  return canvasGrayscaleOnly(raw);
+  return canvasGrayscaleOnly(cropVideoCanvas(video, roi));
 }
 
-/* captureAndRecognize — 4 estrategias OCR sobre la zona número, voto por mayoría */
+function nameMatchesCard(card, guess){
+  const g = String(guess || '').trim().toLowerCase();
+  if(g.length < 2) return false;
+  const n = String(card.name || '').toLowerCase();
+  return n.startsWith(g) || g.startsWith(n) || n.includes(g) || g.includes(n);
+}
+
+function breakTieBySetAndName(cards, setId, guess){
+  let pool = cards;
+  if(setId){
+    const inSet = cards.filter(c => c.setId === setId);
+    if(inSet.length) pool = inSet;
+  }
+  const named = pool.filter(c => nameMatchesCard(c, guess));
+  if(named.length) pool = named;
+  return pool.slice().sort(naturalCardSort);
+}
+
+function smartGuessName(txt){
+  const cands=[];
+  for(const line of String(txt || '').split('\n').map(l=>l.trim()).filter(Boolean)){
+    if(/^[\d\s\/\.\-]+$/.test(line)) continue;
+    const cl=line.replace(/[^A-Za-z\u00C0-\u00FF'\- ]/g,'').trim();
+    if(cl.length<2||cl.length>30) continue;
+    if(/^[A-Z]{1,4}\d{1,3}[a-z]?$/.test(cl)) continue;
+    cands.push(cl);
+  }
+  if(!cands.length) return '';
+  cands.sort((a,b)=>(/^[A-Z]/.test(b)?1:0)-(/^[A-Z]/.test(a)?1:0)||b.length-a.length);
+  return cands[0];
+}
+
+async function settleRecognition({ numberTexts, nameText, cardColor, onStatus, missHint }){
+  const fracCount = {};
+  for(const t of numberTexts){
+    for(const f of extractNumberFraction(t)){
+      const k = f.number+'/'+f.total;
+      fracCount[k] = (fracCount[k]||0)+1;
+    }
+  }
+  let bestFrac='', bestVotes=0;
+  for(const [k,v] of Object.entries(fracCount)){
+    if(v>bestVotes){ bestVotes=v; bestFrac=k; }
+  }
+  const allNumText = numberTexts.join('\n');
+  const detectedSetId = extractSetCode(allNumText);
+  const fractions = extractNumberFraction(bestFrac || allNumText);
+  let byNumber = [];
+  if(fractions.length){
+    byNumber = await matchByNumberAndSet(fractions, detectedSetId).catch(()=>[]);
+  }
+
+  const guess = smartGuessName(nameText);
+  const nameLine = String(nameText || '').replace(/[^A-Za-z\u00C0-\u00FF' \-]/g,'').trim();
+  let debugText = [
+    bestFrac ? `Núm: ${bestFrac} (${bestVotes}/4)` : 'Núm: no detectado',
+    detectedSetId ? `Set: ${detectedSetId}` : '',
+    nameLine.length>1 ? `Nombre: ${nameLine.slice(0,25)}` : ''
+  ].filter(Boolean).join(' · ');
+
+  if(byNumber.length !== 1){
+    const recognizer = await findRecognitionCandidates(extractRecognitionSignals(allNumText)).catch(()=>[]);
+    const strong = recognizer.filter(c => c.score >= 0.86).map(c => c.card);
+    if(strong.length){
+      if(!byNumber.length) byNumber = strong;
+      else {
+        const ids = new Set(strong.map(c => c.id));
+        const hit = byNumber.filter(c => ids.has(c.id));
+        if(hit.length) byNumber = hit;
+      }
+    }
+  }
+
+  if(byNumber.length > 1) byNumber = breakTieBySetAndName(byNumber, detectedSetId, guess);
+
+  const base = { debugText, guess, pending: null, suggestions: [], nameResults: [], message: '' };
+  if(byNumber.length === 1){
+    return { ...base, pending: byNumber[0], message: '¿Es esta la carta?' };
+  }
+  if(byNumber.length > 1){
+    return { ...base, suggestions: byNumber.slice(0, 6), message: '👆 Varias coincidencias. ¿Cuál es?' };
+  }
+
+  let phashResults = [];
+  if(cardColor){
+    if(onStatus) onStatus('📸 Comparando la imagen…');
+    try{ phashResults = await findByPhash(cardColor, 5, 22, detectedSetId); }
+    catch(e){ phashResults = []; }
+    if(phashResults.length){
+      const best = phashResults[0];
+      debugText += ` · 👁 ${best.card.name}(d=${best.distance})`;
+    }
+  }
+  const withHash = { ...base, debugText };
+  let byName = [];
+  if(guess.length >= 2) byName = await searchCards(guess).catch(()=>[]);
+  if(!byName.length && !phashResults.length){
+    return {
+      ...withHash,
+      message: bestFrac
+        ? `⚠️ Leí "${bestFrac}"${detectedSetId ? ' ('+detectedSetId+')' : ''} pero no está en el catálogo.`
+        : (missHint || '⚠️ No pude leer el número. Incluye el código de expansión (PAR, TEF…) junto al número.'),
+    };
+  }
+  if(phashResults.length && !byName.length){
+    if(phashResults[0].distance <= 10){
+      return {
+        ...withHash,
+        pending: phashResults[0].card,
+        message: `👁 Reconocida visualmente (d=${phashResults[0].distance}). ¿Es esta?`,
+      };
+    }
+    return {
+      ...withHash,
+      nameResults: phashResults.map(r => r.card).slice(0, 6),
+      message: '👁 Candidatas por imagen — ¿cuál es?',
+    };
+  }
+  return {
+    ...withHash,
+    nameResults: byName.slice(0, 9),
+    message: guess
+      ? `No vi el número. Encontré cartas de "${guess}" — ¿es alguna de estas?`
+      : 'No vi el número. Resultados por nombre:',
+  };
+}
+
+async function recognizeCardSurfaces({ numberBin, numberGray, nameBin, nameGray, cardColor, onStatus, missHint }){
+  const numberPasses = [
+    [numberBin, '6', 'A'],
+    [numberGray, '6', 'B'],
+    [numberBin, '11', 'C'],
+    [numberGray, '11', 'D'],
+  ];
+  const numberTexts = [];
+  for(const [canvas, psm, label] of numberPasses){
+    if(onStatus) onStatus(`📸 Analizando número (${label})…`);
+    numberTexts.push(await ocrCanvas(canvas, { psmMode: psm }));
+  }
+  if(onStatus) onStatus('📸 Leyendo nombre…');
+  const nameA = await ocrCanvas(nameBin, { psmMode: '7' });
+  const nameB = await ocrCanvas(nameGray, { psmMode: '7' });
+  const nameText = nameA.length >= nameB.length ? nameA : nameB;
+  return settleRecognition({ numberTexts, nameText, cardColor, onStatus, missHint });
+}
+
 async function captureAndRecognize(){
   if(liveBusy) return;
   const video = document.getElementById('liveVideo');
@@ -2214,196 +2211,25 @@ async function captureAndRecognize(){
   }
   liveBusy = true; state.scan.liveError = ''; state.scan.suggestions = [];
   const statusEl = document.getElementById('liveStatusText');
-
   try{
-    // ── ZONA NÚMERO: 4 estrategias OCR ────────────────────────────────────────
-    // El texto en la carta es: "G PAR en 128/182 ♦"
-    // Estrategia A: binarizado + psm 6 (bloque) sin whitelist — detecta la línea entera
-    // Estrategia B: gris puro + psm 6 sin whitelist — por si binarización arruina contraste
-    // Estrategia C: binarizado + psm 11 (sparse) — recoge números sueltos en cualquier posición
-    // Estrategia D: gris puro + psm 11 — fallback definitivo
-    if(statusEl) statusEl.textContent = '📸 Analizando número (A)…';
     const numRoi = state.scan.roiNum;
-    const cBin = captureRoiCanvas(video, numRoi);    // binarizado
-    const cRaw = captureRawCanvas(video, numRoi);    // gris puro
-
-    const [textA, textB, textC, textD] = await Promise.all([
-      ocrCanvas(cBin, { psmMode:'6' }),   // A: bin + bloque
-      ocrCanvas(cRaw, { psmMode:'6' }),   // B: raw + bloque
-      ocrCanvas(cBin, { psmMode:'11' }),  // C: bin + sparse
-      ocrCanvas(cRaw, { psmMode:'11' }),  // D: raw + sparse
-    ]);
-
-    // Votar la fracción más repetida entre las 4 estrategias
-    const fracCount = {};
-    for(const t of [textA, textB, textC, textD]){
-      for(const f of extractNumberFraction(t)){
-        const k = f.number+'/'+f.total;
-        fracCount[k] = (fracCount[k]||0)+1;
-      }
-    }
-    let bestFrac='', bestVotes=0;
-    for(const [k,v] of Object.entries(fracCount)){
-      if(v>bestVotes){ bestVotes=v; bestFrac=k; }
-    }
-
-    // Extraer código de set de todos los textos combinados
-    const allNumText = [textA,textB,textC,textD].join('\n');
-    const detectedSetId = extractSetCode(allNumText);
-
-    // ── ZONA CARTA: franja superior (15%) para el nombre ──────────────────────
-    if(statusEl) statusEl.textContent = '📸 Leyendo nombre…';
     const roi = state.scan.roi;
-    // Solo la franja superior donde está el nombre — evita contaminar con ataques
     const nameRoi = { x: roi.x, y: roi.y, w: roi.w, h: roi.h * 0.15 };
-    const nameCanvasBin = captureRoiCanvas(video, nameRoi);
-    const nameCanvasRaw = captureRawCanvas(video, nameRoi);
-    // Dos pasadas también para el nombre
-    const [nameA, nameB] = await Promise.all([
-      ocrCanvas(nameCanvasBin, { psmMode:'7' }),
-      ocrCanvas(nameCanvasRaw, { psmMode:'7' }),
-    ]);
-    // Elegir el resultado de nombre más largo (más información)
-    const nameText = nameA.length >= nameB.length ? nameA : nameB;
-
-    // Debug legible
-    const nameLine = nameText.replace(/[^A-Za-z\u00C0-\u00FF' \-]/g,'').trim();
-    state.scan.liveText = [
-      bestFrac ? `Núm: ${bestFrac} (${bestVotes}/4)` : 'Núm: no detectado',
-      detectedSetId ? `Set: ${detectedSetId}` : '',
-      nameLine.length>1 ? `Nombre: ${nameLine.slice(0,25)}` : ''
-    ].filter(Boolean).join(' · ');
+    const decision = await recognizeCardSurfaces({
+      numberBin: captureRoiCanvas(video, numRoi),
+      numberGray: captureRawCanvas(video, numRoi),
+      nameBin: captureRoiCanvas(video, nameRoi),
+      nameGray: captureRawCanvas(video, nameRoi),
+      cardColor: cropVideoCanvas(video, roi, { scaleUp: false }),
+      onStatus: (text) => { if(statusEl) statusEl.textContent = text; },
+      missHint: '⚠️ No pude leer el número. Centra el recuadro amarillo sobre "128/182" incluyendo el código antes (PAR/TEF…).',
+    });
+    state.scan.liveText = decision.debugText;
+    state.scan.pendingConfirm = decision.pending;
+    state.scan.suggestions = decision.suggestions;
+    state.scan.nameResults = decision.nameResults;
+    state.scan.liveMessage = decision.message || 'No encontré una carta. Ajusta los recuadros e inténtalo de nuevo.';
     render();
-
-    // ── Señal de color + pHash visual (paralelos, no bloquean el OCR) ─────────
-    let typeScores = {};
-    let colorHint = '';
-    let phashResults = [];
-    try {
-      const r = state.scan.roi;
-
-      // Color: zona superior-izq donde está el símbolo de tipo
-      const typeRoi = { x: r.x, y: r.y, w: r.w * 0.22, h: r.h * 0.38 };
-      const typeCanvas = captureRoiCanvas(video, typeRoi);
-      const { hue, confidence } = dominantHueFromCanvas(typeCanvas);
-      typeScores = hueToTypeScores(hue, confidence);
-      if(confidence > 0.25){
-        const top = Object.entries(typeScores).sort((a,b)=>b[1]-a[1])[0];
-        if(top){ colorHint = top[0]; state.scan.liveText += ` · Tipo≈${top[0]}`; }
-      }
-
-      // pHash: hash perceptual del ROI carta completo
-      // Solo activo si phash.json está cargado con datos suficientes
-      const fullCardCanvas = captureRoiCanvas(video, r);
-      phashResults = await findByPhash(fullCardCanvas, 5, 22);
-      if(phashResults.length > 0){
-        const best = phashResults[0];
-        state.scan.liveText += ` · 👁 ${best.card.name}(d=${best.distance})`;
-      }
-    } catch(e){ /* señales visuales no críticas */ }
-
-    // ── Resolver ──────────────────────────────────────────────────────────────
-    const fractions = extractNumberFraction(bestFrac || allNumText);
-    let byNumber = [];
-    if(fractions.length){
-      byNumber = await matchByNumberAndSet(fractions, detectedSetId).catch(()=>[]);
-    }
-
-    // Señal de rareza: inferida comparando número OCR con setTotal de cada candidato
-    let rarityHint = 'unknown';
-    if(bestFrac && byNumber.length > 0){
-      const frac = fractions[0];
-      // Todos los candidatos comparten el mismo setTotal si el set está identificado
-      const tier = rarityTierFromNumber(frac.number, byNumber[0].setTotal);
-      if(tier !== 'unknown') rarityHint = tier;
-    }
-
-    // Aplicar bonus de señales (solo si hay más de 1 candidato — si hay 1 es certeza)
-    const signals = { rarityHint, typeScores };
-    if(byNumber.length > 1) byNumber = applySignalBonus(byNumber, signals);
-
-    function smartGuessName(txt){
-      const cands=[];
-      for(const line of txt.split('\n').map(l=>l.trim()).filter(Boolean)){
-        if(/^[\d\s\/\.\-]+$/.test(line)) continue;
-        const cl=line.replace(/[^A-Za-z\u00C0-\u00FF'\- ]/g,'').trim();
-        if(cl.length<2||cl.length>30) continue;
-        if(/^[A-Z]{1,4}\d{1,3}[a-z]?$/.test(cl)) continue;
-        cands.push(cl);
-      }
-      if(!cands.length) return '';
-      cands.sort((a,b)=>(/^[A-Z]/.test(b)?1:0)-(/^[A-Z]/.test(a)?1:0)||b.length-a.length);
-      return cands[0];
-    }
-
-    const guess = smartGuessName(nameText);
-    let byName = [];
-    if(guess.length>=2) byName = await searchCards(guess).catch(()=>[]);
-
-    // Limpiar estado previo
-    state.scan.pendingConfirm = null;
-    state.scan.nameResults = [];
-    state.scan.suggestions = [];
-
-    // ── Decisión ──────────────────────────────────────────────────────────────
-    if(byNumber.length===1){
-      // Carta única por número → pedir confirmación visual antes de añadir
-      state.scan.pendingConfirm = byNumber[0];
-      state.scan.liveMessage = '¿Es esta la carta?';
-      render(); return;
-    }
-
-    if(byNumber.length>1){
-      // Varios por número → refinar con nombre
-      const g = guess.toLowerCase();
-      const refined = g ? byNumber.filter(c=>{
-        const n=c.name.toLowerCase();
-        return n.startsWith(g)||g.startsWith(n)||n.includes(g)||g.includes(n);
-      }) : [];
-      if(refined.length===1){
-        state.scan.pendingConfirm = refined[0];
-        state.scan.liveMessage = '¿Es esta la carta?';
-        render(); return;
-      }
-      // Aún hay ambigüedad → mostrar lista de candidatos
-      state.scan.suggestions = (refined.length ? refined : byNumber).slice(0,6);
-      state.scan.liveMessage = '👆 Varias coincidencias. ¿Cuál es?';
-      render(); return;
-    }
-
-    // Número no detectado → usar pHash primero, luego nombre
-    if(byName.length === 0 && phashResults.length === 0){
-      if(bestFrac){
-        state.scan.liveMessage=`⚠️ Leí "${bestFrac}"${detectedSetId?' ('+detectedSetId+')':''} pero no está en el catálogo.`;
-      } else {
-        state.scan.liveMessage='⚠️ No pude leer el número. Centra el recuadro amarillo sobre "128/182" incluyendo el código antes (PAR/TEF…).';
-      }
-      render(); return;
-    }
-
-    // pHash encontró candidatos visuales → mostrarlos para confirmar
-    if(phashResults.length > 0 && byName.length === 0){
-      if(phashResults[0].distance <= 10){
-        // Distancia muy baja = alta confianza visual
-        state.scan.pendingConfirm = phashResults[0].card;
-        state.scan.liveMessage = `👁 Reconocida visualmente (d=${phashResults[0].distance}). ¿Es esta?`;
-        render(); return;
-      }
-      // Distancia moderada → mostrar las mejores como opciones
-      state.scan.nameResults = phashResults.map(r => r.card).slice(0, 6);
-      state.scan.liveMessage = `👁 Candidatas por imagen — ¿cuál es?`;
-      render(); return;
-    }
-
-    // Solo nombre disponible
-    if(byName.length){
-      state.scan.nameResults = byName.slice(0,9);
-      state.scan.liveMessage = guess
-        ? `No vi el número. Encontré cartas de "${guess}" — ¿es alguna de estas?`
-        : 'No vi el número. Resultados por nombre:';
-      render(); return;
-    }
-
   }catch(e){
     console.error(e);
     state.scan.liveError=e?.message||String(e);
@@ -2419,7 +2245,6 @@ function addScannedCard(card, lockMs=3000){
   state.scan.recent=state.scan.recent.slice(0,6);
   state.scan.cooldownUntil=Date.now()+lockMs;
   state.scan.suggestions=[];
-  resetLiveRecognitionStability();
   render();
   queueLiveRecognitionFrame(lockMs);
 }
@@ -2585,7 +2410,7 @@ function renderScanTabPhoto(modeRow){
     <h2 class="section-title" style="margin-top:0">Fotografía la carta</h2>
     <label class="btn btn-primary" for="fileInput">Tomar foto o elegir imagen</label>
     <input type="file" id="fileInput" accept="image/*" capture="environment">
-    <p class="hint">El reconocimiento de texto no es perfecto: revisa el nombre detectado antes de buscar, o corrígelo a mano.</p>
+    <p class="hint">Usa el mismo criterio que la cámara: número, código de expansión e imagen. Si no acierta, corrige el nombre y busca.</p>
   </div>`;
 
   if(s.image){
@@ -2595,9 +2420,9 @@ function renderScanTabPhoto(modeRow){
         <img src="${s.image}" alt="Carta escaneada">
         <div style="flex:1">
           <div class="status-line">
-            ${s.status === 'ocr' ? '<span class="spinner"></span> Leyendo texto de la carta…' : ''}
+            ${s.status === 'ocr' ? `<span class="spinner"></span> <span id="photoStatusText">${escapeHtml(s.detail || 'Leyendo la carta…')}</span>` : ''}
             ${s.status === 'searching' ? '<span class="spinner"></span> Buscando coincidencias…' : ''}
-            ${s.status === 'done' ? 'Confirma o corrige el nombre y busca de nuevo si hace falta.' : ''}
+            ${s.status === 'done' ? escapeHtml(s.detail || 'Confirma la carta o corrige el nombre.') : ''}
             ${s.status === 'error' ? 'No se pudo leer la imagen. Escribe el nombre manualmente.' : ''}
           </div>
         </div>
@@ -3026,26 +2851,30 @@ async function onFileSelected(e){
   if(!file) return;
   try{
     const dataUrl = await resizeImage(file);
-    state.scan.photo = { image: dataUrl, status: 'ocr', guess: '', results: [] };
+    state.scan.photo = { image: dataUrl, status: 'ocr', guess: '', results: [], detail: 'Preparando el motor de lectura…' };
     render();
-    const text = await runOCR(dataUrl);
-    const guess = guessNameFromText(text);
-    state.scan.photo.guess = guess;
-    state.scan.photo.status = 'searching';
-    render();
-
-    const fractions = extractNumberFraction(text);
-    const byNumber = await matchByNumberFraction(fractions).catch(()=>[]);
-    const byName = guess ? await searchCards(guess).catch(()=>[]) : [];
-
-    // el número manda si es concluyente; si no, se combina con el nombre
-    let results = byNumber.length ? byNumber : byName;
-    if(byNumber.length > 1 && byName.length){
-      const ids = new Set(byName.map(c=>c.id));
-      const refined = byNumber.filter(c => ids.has(c.id));
-      if(refined.length) results = refined;
-    }
-    state.scan.photo.results = results;
+    await ensureOcrWorker();
+    const full = await loadCanvasFromDataUrl(dataUrl);
+    const numberColor = cropRatioCanvas(full, 0, 0.78, 0.92, 0.2, { scaleUp: true });
+    const nameColor = cropRatioCanvas(full, 0, 0, 1, 0.15, { scaleUp: true });
+    const decision = await recognizeCardSurfaces({
+      numberBin: preprocessForOCR(numberColor),
+      numberGray: canvasGrayscaleOnly(numberColor),
+      nameBin: preprocessForOCR(nameColor),
+      nameGray: canvasGrayscaleOnly(nameColor),
+      cardColor: full,
+      onStatus: (text) => {
+        state.scan.photo.detail = text;
+        const el = document.getElementById('photoStatusText');
+        if(el) el.textContent = text;
+      },
+      missHint: '⚠️ No pude leer el número. La foto debe mostrar la carta entera, con el código (PAR, TEF…) y el número abajo a la izquierda.',
+    });
+    state.scan.photo.guess = decision.guess || '';
+    state.scan.photo.detail = [decision.debugText, decision.message].filter(Boolean).join(' — ');
+    state.scan.photo.results = decision.pending
+      ? [decision.pending]
+      : (decision.suggestions.length ? decision.suggestions : decision.nameResults);
     state.scan.photo.status = 'done';
     render();
   }catch(err){
