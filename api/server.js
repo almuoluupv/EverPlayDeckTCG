@@ -155,14 +155,17 @@ export async function startServer({ env = process.env, verifyTokenImpl = verifyT
     }
     const userId = userIdFromVerification(result);
     if (!userId) return null;
-    if (known.has(userId)) return { userId, ...known.get(userId) };
+    const cached = known.get(userId);
+    if (cached && Date.now() - cached.at < 60 * 1000) {
+      return { userId, email: cached.email, name: cached.name, markedAdmin: cached.markedAdmin };
+    }
     let extra = { email: '', name: '', markedAdmin: false };
     try {
       extra = profileFromClerkUser(await clerk.users.getUser(userId));
     } catch {
       extra = { email: '', name: '', markedAdmin: false };
     }
-    known.set(userId, extra);
+    known.set(userId, { ...extra, at: Date.now() });
     return { userId, ...extra };
   }
 

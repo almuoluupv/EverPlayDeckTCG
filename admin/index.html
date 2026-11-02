@@ -2,44 +2,153 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Administración</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Administración del álbum</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#14171F; --surface:#1B1F2B; --surface-2:#242A3A; --line:rgba(241,239,233,.08);
-    --accent:#F5C518; --accent-ink:#3A2E00; --teal:#2FB9C4; --text:#F1EFE9; --muted:#8B90A0; --danger:#E4572E;
+    --ink:#14171F;
+    --surface:#1B1F2B;
+    --surface-2:#242A3A;
+    --line:rgba(241,239,233,0.08);
+    --accent:#F5C518;
+    --accent-ink:#3A2E00;
+    --teal:#2FB9C4;
+    --text:#F1EFE9;
+    --muted:#8B90A0;
+    --danger:#E4572E;
+    --radius:14px;
   }
   *{box-sizing:border-box}
-  body{margin:0; background:var(--ink); color:var(--text); font-family:Inter,sans-serif}
-  main{max-width:760px; margin:0 auto; padding:22px 16px 48px}
-  h1{font-family:'Space Grotesk',sans-serif; font-size:26px; margin:0 0 6px}
-  h2{font-family:'Space Grotesk',sans-serif; font-size:18px; margin:28px 0 10px}
-  a{color:var(--teal)}
-  p.lead{color:var(--muted); margin-top:0}
-  .card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; margin:10px 0}
-  button,.btn{background:var(--accent); color:var(--accent-ink); border:0; border-radius:999px; padding:8px 14px; font-weight:700; cursor:pointer}
-  button.ghost{background:transparent; color:var(--text); border:1px solid var(--line)}
-  label{display:block; font-size:13px; margin:8px 0}
-  input,select{width:100%; background:var(--surface-2); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:8px 10px}
-  .row{display:flex; gap:10px; align-items:end; flex-wrap:wrap}
-  .row > *{flex:1; min-width:140px}
-  .meta{color:var(--muted); font-size:12px}
-  .error{color:var(--danger)}
-  pre{white-space:pre-wrap; font-size:12px; color:var(--muted); margin:6px 0 0}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(90% 40% at 50% -10%, rgba(245,197,24,0.10), transparent 55%),
+      var(--ink);
+    color:var(--text);
+    font-family:Inter, sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:980px; margin:0 auto; padding:20px 16px 56px}
+  header.top{
+    display:flex; justify-content:space-between; gap:16px; align-items:flex-start;
+    padding-bottom:16px; border-bottom:1px solid var(--line); margin-bottom:18px;
+  }
+  h1{font-family:'Space Grotesk', sans-serif; font-size:28px; letter-spacing:-0.02em; margin:0 0 6px}
+  .lead{margin:0; color:var(--muted); font-size:14.5px; line-height:1.45; max-width:46ch}
+  a.back{
+    display:inline-flex; align-items:center; gap:6px;
+    color:var(--text); text-decoration:none; font-weight:600; font-size:14px;
+    border:1px solid var(--line); background:var(--surface); border-radius:999px; padding:8px 12px;
+    white-space:nowrap;
+  }
+  .notice{
+    border-radius:12px; padding:12px 14px; margin:0 0 14px; font-size:14px; line-height:1.4;
+    background:var(--surface); border:1px solid var(--line);
+  }
+  .notice.bad{border-color:rgba(228,87,46,.45); color:#ffb4a2}
+  .notice.ok{border-color:rgba(47,185,196,.45); color:#b7f3f6}
+  .switch{display:flex; gap:8px; overflow:auto; padding-bottom:4px; margin-bottom:16px}
+  .switch button{
+    border:1px solid var(--line); background:var(--surface); color:var(--muted);
+    border-radius:999px; padding:10px 14px; font:600 14px Inter, sans-serif; cursor:pointer; white-space:nowrap;
+  }
+  .switch button[aria-selected="true"]{background:var(--accent); color:var(--accent-ink); border-color:transparent}
+  .panel{display:none}
+  .panel.active{display:block}
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px;
+  }
+  .toolbar{display:flex; gap:10px; align-items:center; margin-bottom:12px}
+  .toolbar input{flex:1}
+  label.lbl{display:block; font-size:13px; font-weight:600; margin-bottom:6px}
+  input, select{
+    width:100%; background:var(--surface-2); color:var(--text); border:1px solid var(--line);
+    border-radius:10px; padding:12px 12px; font:16px Inter, sans-serif;
+  }
+  button.primary, button.ghost{
+    border-radius:10px; padding:12px 16px; font:600 14.5px Inter, sans-serif; cursor:pointer;
+  }
+  button.primary{background:var(--accent); color:var(--accent-ink); border:0}
+  button.ghost{background:var(--surface-2); color:var(--text); border:1px solid var(--line)}
+  button:disabled{opacity:.6; cursor:default}
+  .user{
+    display:grid; gap:12px; padding:14px 0; border-top:1px solid var(--line);
+  }
+  .user:first-of-type{border-top:0; padding-top:0}
+  .who{min-width:0}
+  .who strong{display:block; font-size:16px; word-break:break-word}
+  .meta{color:var(--muted); font-size:13px; line-height:1.4; margin-top:3px}
+  .badge{
+    display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px;
+    background:rgba(245,197,24,.15); color:var(--accent); font-size:11px; font-weight:700; vertical-align:1px;
+  }
+  .count{font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:18px}
+  .plans{display:grid; gap:12px}
+  .plan h2{font-family:'Space Grotesk', sans-serif; font-size:18px; margin:0 0 4px}
+  .plan p{margin:0 0 12px; color:var(--muted); font-size:13.5px; line-height:1.4}
+  .actions{display:flex; justify-content:flex-end; margin-top:14px}
+  .log{padding:14px 0; border-top:1px solid var(--line)}
+  .log:first-of-type{border-top:0; padding-top:0}
+  .log p{margin:6px 0 0; font-size:15px; line-height:1.45}
+  details{margin-top:8px}
+  summary{cursor:pointer; color:var(--teal); font-size:13px}
+  pre{
+    white-space:pre-wrap; word-break:break-word; font-size:12px; color:var(--muted);
+    background:var(--surface-2); border-radius:10px; padding:10px; margin:8px 0 0;
+  }
+  .empty{color:var(--muted); font-size:14.5px; line-height:1.5; margin:0}
+  .center{text-align:center; padding:28px 8px}
+  .spinner{
+    width:18px; height:18px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--accent);
+    animation:spin .8s linear infinite; display:inline-block; vertical-align:-3px; margin-right:8px;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (min-width: 800px){
+    .user{grid-template-columns:minmax(0,1fr) 160px 220px auto; align-items:center}
+    .plans{grid-template-columns:repeat(3, 1fr)}
+    .actions{grid-column:1 / -1}
+  }
+  @media (max-width: 799px){
+    h1{font-size:24px}
+    header.top{flex-direction:column}
+    .actions button, .user button{width:100%}
+  }
 </style>
 </head>
 <body>
-<main>
-  <p class="meta"><a id="back" href="../">Volver al álbum</a></p>
-  <h1>Administración</h1>
-  <p class="lead" id="status">Comprobando la sesión…</p>
-  <div id="app"></div>
-</main>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Administración</h1>
+      <p class="lead">Usuarios del álbum, el tope de cartas de cada plan y los avisos que manda el navegador.</p>
+    </div>
+    <a class="back" id="back" href="../">Volver al álbum</a>
+  </header>
+  <div id="notice"></div>
+  <div id="gate"></div>
+  <div id="desk" hidden>
+    <div class="switch" role="tablist">
+      <button type="button" id="tabUsers" role="tab" aria-selected="true">Usuarios</button>
+      <button type="button" id="tabPlans" role="tab" aria-selected="false">Planes</button>
+      <button type="button" id="tabLogs" role="tab" aria-selected="false">Avisos</button>
+    </div>
+    <section id="panelUsers" class="panel active"></section>
+    <section id="panelPlans" class="panel"></section>
+    <section id="panelLogs" class="panel"></section>
+  </div>
+</div>
 <script src="../config.js"></script>
 <script>
 const ADMIN_URL = 'https://almuoluupv.github.io/EverPlayDeckTCG/admin/';
+let overview = null;
+let panel = 'users';
+let userQuery = '';
+let busy = '';
+let notice = null;
+
 function albumConfig(){
   const cfg = window.ALBUM_CONFIG || {};
   return {
@@ -79,14 +188,10 @@ function loadScript(src, attrs){
 function redirectOptions(){
   const url = returnUrl();
   return {
-    signInUrl: url,
-    signUpUrl: url,
-    signInForceRedirectUrl: url,
-    signInFallbackRedirectUrl: url,
-    signUpForceRedirectUrl: url,
-    signUpFallbackRedirectUrl: url,
-    afterSignOutUrl: url,
-    afterMultiSessionSingleSignOutUrl: url,
+    signInUrl: url, signUpUrl: url,
+    signInForceRedirectUrl: url, signInFallbackRedirectUrl: url,
+    signUpForceRedirectUrl: url, signUpFallbackRedirectUrl: url,
+    afterSignOutUrl: url, afterMultiSessionSingleSignOutUrl: url,
   };
 }
 function devBrowserToken(original){
@@ -133,137 +238,229 @@ async function api(path, options){
   try{ json = text ? JSON.parse(text) : null; }catch{ json = null; }
   return { status: res.status, json };
 }
-function setStatus(text){
-  document.getElementById('status').textContent = text;
+function setNotice(text, kind){
+  notice = text ? { text, kind: kind || '' } : null;
+  const el = document.getElementById('notice');
+  if(!notice){ el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="notice ${notice.kind === 'bad' ? 'bad' : 'ok'}">${escapeHtml(notice.text)}</div>`;
+}
+function showGate(html){
+  document.getElementById('desk').hidden = true;
+  document.getElementById('gate').innerHTML = html;
+}
+function formatWhen(value){
+  const date = new Date(value);
+  if(Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('es', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+function planMax(planId){
+  const plan = (overview.plans || []).find((item) => item.id === planId);
+  return plan ? plan.maxCards : null;
+}
+function visibleUsers(){
+  const q = userQuery.trim().toLowerCase();
+  return (overview.users || []).filter((user) => {
+    if(!q) return true;
+    return [user.email, user.name, user.planId].join(' ').toLowerCase().includes(q);
+  });
+}
+function selectPanel(next){
+  panel = next;
+  document.getElementById('tabUsers').setAttribute('aria-selected', String(next === 'users'));
+  document.getElementById('tabPlans').setAttribute('aria-selected', String(next === 'plans'));
+  document.getElementById('tabLogs').setAttribute('aria-selected', String(next === 'logs'));
+  document.getElementById('panelUsers').classList.toggle('active', next === 'users');
+  document.getElementById('panelPlans').classList.toggle('active', next === 'plans');
+  document.getElementById('panelLogs').classList.toggle('active', next === 'logs');
 }
 
-let overview = null;
-
-function renderOverview(){
-  const root = document.getElementById('app');
-  const plans = overview.plans.map((plan) => `
-    <label>${escapeHtml(plan.name)}
-      <input data-plan="${escapeHtml(plan.id)}" type="number" min="1" max="100000" value="${plan.maxCards}">
-    </label>`).join('');
-  const users = overview.users.map((user) => `
-    <div class="card">
-      <strong>${escapeHtml(user.email || user.userId)}</strong>
-      ${user.admin ? '<span class="meta"> · admin</span>' : ''}
-      <div class="meta">${escapeHtml(user.name || '')} · ${user.cards} cartas guardadas</div>
-      <div class="row">
-        <label>Plan
-          <select data-user="${escapeHtml(user.userId)}">
-            ${overview.plans.map((plan) => `<option value="${plan.id}" ${plan.id === user.planId ? 'selected' : ''}>${escapeHtml(plan.name)}</option>`).join('')}
-          </select>
-        </label>
-        <button type="button" data-save-user="${escapeHtml(user.userId)}">Guardar plan</button>
+function renderDesk(){
+  document.getElementById('gate').innerHTML = '';
+  document.getElementById('desk').hidden = false;
+  const users = visibleUsers();
+  const userHtml = users.length ? users.map((user) => {
+    const max = planMax(user.planId);
+    const label = user.email || 'Sin correo';
+    return `<article class="user">
+      <div class="who">
+        <strong>${escapeHtml(label)}${user.admin ? '<span class="badge">Admin</span>' : ''}</strong>
+        <div class="meta">${escapeHtml(user.name || 'Sin nombre')}</div>
       </div>
-    </div>`).join('') || '<p class="meta">Todavía no ha entrado nadie.</p>';
-  const logs = overview.logs.map((row) => `
-    <div class="card">
-      <div class="meta">${escapeHtml(row.createdAt)} · ${escapeHtml(row.email || row.userId || 'sin sesión')} · ${escapeHtml(row.source || '')} · ${escapeHtml(row.path || '')}</div>
-      <div>${escapeHtml(row.message)}</div>
-      ${row.stack ? `<pre>${escapeHtml(row.stack)}</pre>` : ''}
-    </div>`).join('') || '<p class="meta">No hay avisos.</p>';
-  root.innerHTML = `
-    <h2>Planes</h2>
-    <form id="plansForm" class="card">
-      <p class="meta">El máximo es la suma de copias que esa cuenta puede guardar en el álbum.</p>
-      ${plans}
-      <button type="submit">Guardar máximos</button>
-    </form>
-    <h2>Usuarios</h2>
-    ${users}
-    <h2>Avisos del navegador</h2>
-    ${logs}`;
+      <div>
+        <div class="count">${user.cards}</div>
+        <div class="meta">${max ? 'de ' + max + ' en su plan' : 'cartas guardadas'}</div>
+      </div>
+      <label class="lbl">Plan
+        <select data-user="${escapeHtml(user.userId)}" aria-label="Plan de ${escapeHtml(label)}">
+          ${overview.plans.map((plan) => `<option value="${plan.id}" ${plan.id === user.planId ? 'selected' : ''}>${escapeHtml(plan.name)}</option>`).join('')}
+        </select>
+      </label>
+      <button class="primary" type="button" data-save-user="${escapeHtml(user.userId)}" ${busy === user.userId ? 'disabled' : ''}>${busy === user.userId ? 'Guardando…' : 'Asignar plan'}</button>
+    </article>`;
+  }).join('') : `<p class="empty">${userQuery ? 'Nadie coincide con esa búsqueda.' : 'Cuando alguien entre en el álbum, aparecerá aquí.'}</p>`;
+
+  document.getElementById('panelUsers').innerHTML = `<div class="card">
+    <div class="toolbar">
+      <input id="userSearch" type="search" placeholder="Buscar por nombre o correo" value="${escapeHtml(userQuery)}" aria-label="Buscar usuarios">
+    </div>
+    ${userHtml}
+  </div>`;
+
+  document.getElementById('panelPlans').innerHTML = `<form id="plansForm">
+    <div class="plans">
+      ${overview.plans.map((plan) => `<article class="card plan">
+        <h2>${escapeHtml(plan.name)}</h2>
+        <p>${plan.id === 'gratis' ? 'Para quien empieza.' : plan.id === 'coleccion' ? 'Para una colección grande.' : 'Para quien guarda muchas copias.'}</p>
+        <label class="lbl" for="plan-${plan.id}">Máximo de cartas</label>
+        <input id="plan-${plan.id}" data-plan="${plan.id}" type="number" min="1" max="100000" inputmode="numeric" value="${plan.maxCards}">
+      </article>`).join('')}
+    </div>
+    <div class="actions"><button class="primary" type="submit" ${busy === 'plans' ? 'disabled' : ''}>${busy === 'plans' ? 'Guardando…' : 'Guardar máximos'}</button></div>
+  </form>`;
+
+  const logs = overview.logs || [];
+  document.getElementById('panelLogs').innerHTML = `<div class="card">
+    ${logs.length ? logs.map((row) => `<article class="log">
+      <div class="meta">${escapeHtml(formatWhen(row.createdAt))} · ${escapeHtml(row.email || 'Sin sesión')} · ${escapeHtml(row.source || 'cliente')}</div>
+      <p>${escapeHtml(row.message)}</p>
+      ${row.stack ? `<details><summary>Detalle técnico</summary><pre>${escapeHtml(row.stack)}</pre></details>` : ''}
+    </article>`).join('') : '<p class="empty">No hay avisos. Si el álbum falla en un navegador, el texto del fallo llega aquí, sin fotos ni claves.</p>'}
+  </div>`;
+
+  const search = document.getElementById('userSearch');
+  if(search){
+    search.addEventListener('input', () => {
+      userQuery = search.value;
+      const pos = search.selectionStart;
+      renderDesk();
+      const again = document.getElementById('userSearch');
+      if(again){ again.focus(); again.setSelectionRange(pos, pos); }
+    });
+  }
   document.getElementById('plansForm').addEventListener('submit', savePlans);
-  root.querySelectorAll('[data-save-user]').forEach((button) => {
+  document.querySelectorAll('[data-save-user]').forEach((button) => {
     button.addEventListener('click', () => saveUser(button.dataset.saveUser));
   });
+  selectPanel(panel);
 }
 
 async function savePlans(event){
   event.preventDefault();
   const plans = overview.plans.map((plan) => {
-    const input = document.querySelector(`[data-plan="${plan.id}"]`);
+    const input = document.getElementById('plan-' + plan.id);
     return { id: plan.id, maxCards: Number(input.value) };
   });
-  const res = await api('/api/admin/plans', { method: 'PUT', body: { plans } });
-  if(res.status !== 200){
-    setStatus(res.json && res.json.error ? res.json.error : 'No se pudieron guardar los planes');
+  if(plans.some((plan) => !Number.isInteger(plan.maxCards) || plan.maxCards < 1 || plan.maxCards > 100000)){
+    setNotice('Cada máximo tiene que ser un número entre 1 y 100000.', 'bad');
     return;
   }
-  await loadOverview();
-  setStatus('Máximos guardados.');
+  busy = 'plans';
+  renderDesk();
+  const res = await api('/api/admin/plans', { method: 'PUT', body: { plans } });
+  busy = '';
+  if(res.status !== 200){
+    setNotice(res.json && res.json.error ? res.json.error : 'No se pudieron guardar los máximos.', 'bad');
+    renderDesk();
+    return;
+  }
+  overview.plans = res.json.plans;
+  setNotice('Máximos guardados. Las cuentas los usan la próxima vez que guarden el álbum.', 'ok');
+  renderDesk();
 }
 
 async function saveUser(userId){
   const select = document.querySelector(`select[data-user="${CSS.escape(userId)}"]`);
+  if(!select) return;
+  busy = userId;
+  renderDesk();
   const res = await api('/api/admin/users', { method: 'PUT', body: { userId, planId: select.value } });
+  busy = '';
   if(res.status !== 200){
-    setStatus(res.json && res.json.error ? res.json.error : 'No se pudo cambiar el plan');
+    setNotice(res.json && res.json.error ? res.json.error : 'No se pudo asignar el plan.', 'bad');
+    renderDesk();
     return;
   }
-  await loadOverview();
-  setStatus('Plan actualizado.');
+  const row = overview.users.find((user) => user.userId === userId);
+  if(row) row.planId = res.json.planId;
+  setNotice('Plan asignado.', 'ok');
+  renderDesk();
 }
 
 async function loadOverview(){
-  const res = await api('/api/admin');
-  if(res.status === 403 || res.status === 401){
-    document.getElementById('app').innerHTML = '';
-    setStatus('No tienes acceso a esta página.');
+  showGate('<div class="card center"><span class="spinner"></span>Cargando usuarios y planes…</div>');
+  let res;
+  try{
+    res = await api('/api/admin');
+  }catch{
+    showGate(`<div class="card center"><p class="empty">No hay conexión con la API. Puede estar dormida: espera un minuto y reintenta.</p><button class="primary" id="retry" type="button">Reintentar</button></div>`);
+    document.getElementById('retry').addEventListener('click', loadOverview);
     return;
   }
-  if(res.status !== 200 || !res.json){
-    setStatus('No se pudo cargar la administración.');
+  if(res.status === 403 || res.status === 401){
+    showGate('<div class="card center"><p class="empty">Esta cuenta no administra el álbum.</p><a class="back" href="../">Volver al álbum</a></div>');
+    return;
+  }
+  if(res.status !== 200 || !res.json || !Array.isArray(res.json.plans)){
+    showGate('<div class="card center"><p class="empty">La administración no respondió bien.</p><button class="primary" id="retry" type="button">Reintentar</button></div>');
+    document.getElementById('retry').addEventListener('click', loadOverview);
     return;
   }
   overview = res.json;
-  setStatus('Solo visible para la cuenta de administración.');
-  renderOverview();
+  renderDesk();
+}
+
+function wireTabs(){
+  document.getElementById('tabUsers').addEventListener('click', () => selectPanel('users'));
+  document.getElementById('tabPlans').addEventListener('click', () => selectPanel('plans'));
+  document.getElementById('tabLogs').addEventListener('click', () => selectPanel('logs'));
 }
 
 async function boot(){
+  wireTabs();
+  showGate('<div class="card center"><span class="spinner"></span>Comprobando la sesión…</div>');
   const optional = document.createElement('script');
   optional.src = '../config.local.js';
-  optional.onerror = () => {};
   document.head.appendChild(optional);
   await new Promise((resolve) => { optional.onload = resolve; optional.onerror = resolve; });
   const cfg = albumConfig();
   if(!cfg.apiBase || !cfg.clerkPublishableKey){
-    setStatus('Falta la configuración pública.');
+    showGate('<div class="card center"><p class="empty">Falta la configuración pública del álbum.</p></div>');
     return;
   }
-  const host = clerkHost(cfg.clerkPublishableKey);
-  await loadScript(`https://${host}/npm/@clerk/ui@1/dist/ui.browser.js`);
-  await loadScript(`https://${host}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`, {
-    'data-clerk-publishable-key': cfg.clerkPublishableKey,
-  });
-  if(typeof window.Clerk === 'function') window.Clerk = new window.Clerk(cfg.clerkPublishableKey);
-  await window.Clerk.load({
-    ui: { ClerkUI: window.__internal_ClerkUICtor },
-    ...redirectOptions(),
-  });
-  keepClerkDevBrowserOnReturn(window.Clerk);
+  try{
+    const host = clerkHost(cfg.clerkPublishableKey);
+    await loadScript(`https://${host}/npm/@clerk/ui@1/dist/ui.browser.js`);
+    await loadScript(`https://${host}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`, {
+      'data-clerk-publishable-key': cfg.clerkPublishableKey,
+    });
+    if(typeof window.Clerk === 'function') window.Clerk = new window.Clerk(cfg.clerkPublishableKey);
+    await window.Clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor }, ...redirectOptions() });
+    keepClerkDevBrowserOnReturn(window.Clerk);
+  }catch(err){
+    console.error(err);
+    showGate('<div class="card center"><p class="empty">No se pudo abrir el acceso. Recarga la página.</p></div>');
+    return;
+  }
   if(!window.Clerk.user){
-    setStatus('Entra en el álbum con tu cuenta. El enlace de administración solo aparece si esa cuenta es admin.');
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = 'Entrar';
-    button.addEventListener('click', () => {
+    showGate(`<div class="card center">
+      <p class="empty">Entra con la cuenta que administra el álbum. Si no lo es, esta página no muestra datos.</p>
+      <button class="primary" id="signIn" type="button">Entrar</button>
+    </div>`);
+    document.getElementById('signIn').addEventListener('click', () => {
       if(typeof window.Clerk.openSignIn === 'function'){
-        window.Clerk.openSignIn({ withSignUp: true, transferable: true, oauthFlow: 'redirect', forceRedirectUrl: returnUrl(), fallbackRedirectUrl: returnUrl() });
+        window.Clerk.openSignIn({
+          withSignUp: true, transferable: true, oauthFlow: 'redirect',
+          forceRedirectUrl: returnUrl(), fallbackRedirectUrl: returnUrl(),
+        });
       }
     });
-    document.getElementById('app').appendChild(button);
     return;
   }
   await loadOverview();
 }
 boot().catch((err) => {
   console.error(err);
-  setStatus('No se pudo abrir la administración.');
+  showGate('<div class="card center"><p class="empty">No se pudo abrir la administración.</p></div>');
 });
 </script>
 </body>

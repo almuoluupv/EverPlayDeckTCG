@@ -102,9 +102,9 @@
     border:none;
     color: var(--muted);
     font-family:'Inter', sans-serif;
-    font-size: 12.5px;
+    font-size: 11px;
     font-weight:600;
-    padding: 12px 4px 14px;
+    padding: 10px 2px 12px;
     display:flex;
     flex-direction:column;
     align-items:center;
@@ -139,17 +139,23 @@
   .btn-primary:active{ transform: translateY(1px); }
   .btn-ghost{ background: var(--surface-2); color: var(--text); border:1px solid var(--line); }
 
-  input[type="text"]{
+  input[type="text"], input[type="email"]{
     width:100%;
     background: var(--surface-2);
     border: 1px solid var(--line);
     color: var(--text);
     border-radius: 10px;
     padding: 12px 14px;
-    font-size: 15px;
+    font-size: 16px;
     font-family:'Inter', sans-serif;
   }
-  input[type="text"]::placeholder{ color: var(--muted); }
+  input[type="text"]::placeholder, input[type="email"]::placeholder{ color: var(--muted); }
+  .field-label{ display:block; font-size:13px; font-weight:600; margin:14px 0 6px; }
+  .plan-meter{ height:8px; border-radius:999px; background:var(--surface-2); overflow:hidden; margin:10px 0 6px; }
+  .plan-meter span{ display:block; height:100%; background:var(--accent); }
+  .account-note{ font-size:13.5px; line-height:1.45; color:var(--muted); margin:8px 0 0; }
+  .account-note.bad{ color:var(--danger); }
+  .account-note.ok{ color:var(--teal); }
   input[type="file"]{ display:none; }
 
   h2.section-title{
@@ -482,6 +488,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="4.5" width="8" height="8" rx="1.5"/><rect x="12.5" y="4.5" width="8" height="8" rx="1.5"/><rect x="3.5" y="13.5" width="8" height="8" rx="1.5"/><rect x="12.5" y="13.5" width="8" height="8" rx="1.5"/></svg>
       Expansiones
     </button>
+    <button data-tab="account">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2"/><path d="M5.2 19.2c1.3-3 3.6-4.4 6.8-4.4s5.5 1.4 6.8 4.4"/></svg>
+      Cuenta
+    </button>
   </nav>
 </div>
 
@@ -521,6 +531,17 @@ const state = {
     photo: { image:null, status:'idle', guess:'', results:[], detail:'' }
   },
   search: { query:'', results:[], status:'idle' },
+  account: {
+    userId: '',
+    firstName: '',
+    lastName: '',
+    email: '',
+    code: '',
+    pendingEmailId: '',
+    touched: false,
+    status: 'idle',
+    message: '',
+  },
   sortMode: 'expansion', // 'expansion' | 'price-desc' | 'price-asc'
   expansion: {
     view: 'sets', // 'sets' | 'cards'
@@ -2739,6 +2760,163 @@ function renderExpansionCards(){
   document.getElementById('main').innerHTML = html;
 }
 
+function accountUser(){
+  return window.Clerk && window.Clerk.loaded && window.Clerk.user ? window.Clerk.user : null;
+}
+
+function clerkErrorText(err){
+  const first = err && Array.isArray(err.errors) ? err.errors[0] : null;
+  const text = first && (first.longMessage || first.message);
+  if(text) return String(text);
+  if(err && err.message) return String(err.message);
+  return 'No se pudieron guardar los datos.';
+}
+
+function ensureAccountDraft(){
+  const user = accountUser();
+  if(!user) return;
+  if(state.account.touched && state.account.userId === user.id) return;
+  state.account.userId = user.id;
+  state.account.firstName = user.firstName || '';
+  state.account.lastName = user.lastName || '';
+  const primary = user.primaryEmailAddress;
+  state.account.email = primary && primary.emailAddress ? primary.emailAddress : '';
+}
+
+function renderAccountTab(){
+  const user = accountUser();
+  let html = '';
+  if(!user){
+    html = `<div class="card-box">
+      <h2 class="section-title">Tu cuenta</h2>
+      <p class="hint" style="margin-top:0">Entra para ver tu plan, el tope de cartas y los datos de tu perfil. Sin sesión, el álbum se queda solo en este dispositivo.</p>
+      <button class="btn btn-primary" id="accountSignIn" type="button">Entrar</button>
+    </div>`;
+    document.getElementById('main').innerHTML = html;
+    return;
+  }
+  ensureAccountDraft();
+  const used = albumCardCount(state.collection);
+  const max = planLimit();
+  const plan = accountAccess.plan;
+  const planName = plan && plan.name ? plan.name : '';
+  const ratio = max ? Math.min(100, Math.round((used / max) * 100)) : 0;
+  const noteClass = state.account.status === 'error' ? 'bad' : (state.account.status === 'saved' || state.account.status === 'code' ? 'ok' : '');
+  html = `<div class="card-box">
+    <h2 class="section-title">Tu plan</h2>
+    ${planName ? `<p class="hint" style="margin-top:0"><strong style="color:var(--text)">${escapeHtml(planName)}</strong> · hasta ${max} cartas, contando copias.</p>
+      <div class="plan-meter" aria-hidden="true"><span style="width:${ratio}%"></span></div>
+      <p class="account-note">${used} de ${max} cartas guardadas en esta cuenta.</p>`
+      : `<p class="hint" style="margin-top:0">No se pudo leer el plan. Si acabas de entrar, espera un momento y abre esta pestaña otra vez.</p>`}
+    <p class="account-note">El plan no se cambia desde aquí. Lo asigna quien administra el álbum.</p>
+  </div>
+  <div class="card-box" style="margin-top:14px">
+    <h2 class="section-title">Datos del perfil</h2>
+    <p class="hint" style="margin-top:0">Nombre y correo de la cuenta con la que entras. El correo nuevo solo queda activo cuando confirmas el código que te llega.</p>
+    <label class="field-label" for="accountFirst">Nombre</label>
+    <input id="accountFirst" type="text" autocomplete="given-name" value="${escapeHtml(state.account.firstName)}">
+    <label class="field-label" for="accountLast">Apellidos</label>
+    <input id="accountLast" type="text" autocomplete="family-name" value="${escapeHtml(state.account.lastName)}">
+    <label class="field-label" for="accountEmail">Correo</label>
+    <input id="accountEmail" type="email" autocomplete="email" value="${escapeHtml(state.account.email)}">
+    ${state.account.pendingEmailId ? `<label class="field-label" for="accountCode">Código del correo</label>
+      <input id="accountCode" type="text" inputmode="numeric" autocomplete="one-time-code" value="${escapeHtml(state.account.code)}" placeholder="Código que te llegó">
+      <div style="height:12px"></div>
+      <button class="btn btn-primary" id="accountConfirmEmail" type="button" ${state.account.status === 'saving' ? 'disabled' : ''}>Confirmar correo</button>` : `
+      <div style="height:14px"></div>
+      <button class="btn btn-primary" id="accountSave" type="button" ${state.account.status === 'saving' ? 'disabled' : ''}>${state.account.status === 'saving' ? 'Guardando…' : 'Guardar datos'}</button>`}
+    ${state.account.message ? `<p class="account-note ${noteClass}">${escapeHtml(state.account.message)}</p>` : ''}
+  </div>`;
+  document.getElementById('main').innerHTML = html;
+}
+
+async function saveAccountProfile(){
+  const user = accountUser();
+  if(!user || typeof user.update !== 'function'){
+    state.account.status = 'error';
+    state.account.message = 'La sesión no está lista. Vuelve a entrar.';
+    render();
+    return;
+  }
+  state.account.status = 'saving';
+  state.account.message = '';
+  render();
+  try{
+    await user.update({
+      firstName: state.account.firstName.trim(),
+      lastName: state.account.lastName.trim(),
+    });
+  }catch(err){
+    console.error(err);
+    state.account.status = 'error';
+    state.account.message = clerkErrorText(err);
+    render();
+    return;
+  }
+  const current = user.primaryEmailAddress && user.primaryEmailAddress.emailAddress
+    ? user.primaryEmailAddress.emailAddress
+    : '';
+  const next = state.account.email.trim();
+  if(next && next.toLowerCase() !== current.toLowerCase()){
+    try{
+      if(typeof user.createEmailAddress !== 'function') throw new Error('Esta cuenta no permite cambiar el correo desde aquí.');
+      const created = await user.createEmailAddress({ email: next });
+      await created.prepareVerification({ strategy: 'email_code' });
+      state.account.pendingEmailId = created.id;
+      state.account.code = '';
+      state.account.status = 'code';
+      state.account.message = 'El nombre ya está guardado. Escribe el código que enviamos a ' + next + '.';
+      render();
+      return;
+    }catch(err){
+      console.error(err);
+      state.account.status = 'error';
+      state.account.message = 'El nombre se guardó. El correo no: ' + clerkErrorText(err);
+      render();
+      return;
+    }
+  }
+  if(typeof user.reload === 'function') await user.reload().catch(()=>{});
+  state.account.touched = false;
+  state.account.status = 'saved';
+  state.account.message = 'Datos guardados.';
+  ensureAccountDraft();
+  render();
+}
+
+async function confirmAccountEmail(){
+  const user = accountUser();
+  const email = user && Array.isArray(user.emailAddresses)
+    ? user.emailAddresses.find(item => item.id === state.account.pendingEmailId)
+    : null;
+  if(!email || typeof email.attemptVerification !== 'function'){
+    state.account.status = 'error';
+    state.account.message = 'Ese código ya no sirve. Vuelve a guardar el correo.';
+    state.account.pendingEmailId = '';
+    render();
+    return;
+  }
+  state.account.status = 'saving';
+  state.account.message = '';
+  render();
+  try{
+    await email.attemptVerification({ code: state.account.code.trim() });
+    await user.update({ primaryEmailAddressId: email.id });
+    if(typeof user.reload === 'function') await user.reload().catch(()=>{});
+    state.account.pendingEmailId = '';
+    state.account.code = '';
+    state.account.touched = false;
+    state.account.status = 'saved';
+    state.account.message = 'Correo actualizado.';
+    ensureAccountDraft();
+  }catch(err){
+    console.error(err);
+    state.account.status = 'error';
+    state.account.message = clerkErrorText(err);
+  }
+  render();
+}
+
 function updateHeader(){
   const total = state.collection.reduce((n,c)=> n + c.qty, 0);
   document.getElementById('collectionCount').textContent = `${total} ${total===1?'carta':'cartas'}`;
@@ -2755,6 +2933,7 @@ function render(){
   if(state.tab === 'scan') renderScanTab();
   else if(state.tab === 'search') renderSearchTab();
   else if(state.tab === 'expansion') renderExpansionTab();
+  else if(state.tab === 'account') renderAccountTab();
   else renderCollectionTab();
   updateHeader();
   attachDynamicListeners();
@@ -2769,6 +2948,21 @@ function render(){
 
 /* ---------- listeners dinámicos (regenerados en cada render) ---------- */
 function attachDynamicListeners(){
+  const accountSignIn = document.getElementById('accountSignIn');
+  if(accountSignIn) accountSignIn.addEventListener('click', onSignInClick);
+  ['accountFirst','accountLast','accountEmail','accountCode'].forEach((id) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const key = { accountFirst:'firstName', accountLast:'lastName', accountEmail:'email', accountCode:'code' }[id];
+    el.addEventListener('input', () => {
+      state.account[key] = el.value;
+      state.account.touched = true;
+    });
+  });
+  const accountSave = document.getElementById('accountSave');
+  if(accountSave) accountSave.addEventListener('click', () => saveAccountProfile());
+  const accountConfirm = document.getElementById('accountConfirmEmail');
+  if(accountConfirm) accountConfirm.addEventListener('click', () => confirmAccountEmail());
   document.querySelectorAll('.chip[data-mode]').forEach(el=>{
     el.addEventListener('click', ()=>{
       if(state.scan.mode === el.dataset.mode) return;
