@@ -678,10 +678,44 @@ function setAuthNote(text){
   if(note) note.textContent = text;
 }
 
+const PAGES_APP_URL = 'https://almuoluupv.github.io/EverPlayDeckTCG/';
+
+function clerkReturnUrl(){
+  try{
+    const here = new URL(window.location.href);
+    if(here.hostname === 'almuoluupv.github.io') return PAGES_APP_URL;
+    return new URL('./', here).href;
+  }catch{
+    return PAGES_APP_URL;
+  }
+}
+
+function clerkRedirectOptions(){
+  const url = clerkReturnUrl();
+  return {
+    signInUrl: url,
+    signUpUrl: url,
+    signInForceRedirectUrl: url,
+    signInFallbackRedirectUrl: url,
+    signUpForceRedirectUrl: url,
+    signUpFallbackRedirectUrl: url,
+    afterSignOutUrl: url,
+    afterMultiSessionSingleSignOutUrl: url,
+  };
+}
+
 function onSignInClick(){
   const clerk = window.Clerk;
   if(clerk && clerk.loaded && typeof clerk.openSignIn === 'function' && !clerk.user){
-    clerk.openSignIn({});
+    const back = clerkRedirectOptions();
+    clerk.openSignIn({
+      forceRedirectUrl: back.signInForceRedirectUrl,
+      fallbackRedirectUrl: back.signInFallbackRedirectUrl,
+      signInForceRedirectUrl: back.signInForceRedirectUrl,
+      signInFallbackRedirectUrl: back.signInFallbackRedirectUrl,
+      signUpForceRedirectUrl: back.signUpForceRedirectUrl,
+      signUpFallbackRedirectUrl: back.signUpFallbackRedirectUrl,
+    });
     return;
   }
   if(clerkFailed || !albumConfig().clerkPublishableKey){
@@ -766,6 +800,7 @@ async function loadClerk(){
   }
   await window.Clerk.load({
     ui: { ClerkUI: window.__internal_ClerkUICtor },
+    ...clerkRedirectOptions(),
   });
 }
 
