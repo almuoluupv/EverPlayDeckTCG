@@ -704,18 +704,82 @@ function clerkRedirectOptions(){
   };
 }
 
+function keepClerkDevBrowserOnReturn(clerk){
+  if(!clerk || clerk.__albumDevBrowser || clerk.instanceType === 'production') return;
+  if(typeof clerk.buildUrlWithAuth !== 'function') return;
+  const original = clerk.buildUrlWithAuth.bind(clerk);
+  clerk.buildUrlWithAuth = (value) => {
+    const built = original(value);
+    let url;
+    try{ url = new URL(built, window.location.href); }
+    catch{ return built; }
+    if(url.origin !== window.location.origin || url.searchParams.has('__clerk_db_jwt')) return url.href;
+    let token = '';
+    try{
+      const host = clerkHost(albumConfig().clerkPublishableKey);
+      token = new URL(original('https://' + host + '/')).searchParams.get('__clerk_db_jwt') || '';
+    }catch{ token = ''; }
+    if(!token) return url.href;
+    url.searchParams.set('__clerk_db_jwt', token);
+    return url.href;
+  };
+  clerk.__albumDevBrowser = true;
+}
+
+function prepareGoogleReturn(){
+  const hash = window.location.hash || '';
+  if(!hash.includes('sso-callback')) return;
+  const url = new URL(window.location.href);
+  url.hash = '';
+  history.replaceState(null, '', url.href);
+}
+
+async function finishGoogleReturn(){
+  const params = new URLSearchParams(window.location.search);
+  if(!params.get('__clerk_status') && !params.get('__clerk_created_session')) return;
+  const clerk = window.Clerk;
+  if(!clerk || typeof clerk.handleRedirectCallback !== 'function') return;
+  const back = clerkRedirectOptions();
+  try{
+    await clerk.handleRedirectCallback({
+      ...back,
+      transferable: true,
+    }, (dest) => {
+      let target;
+      try{ target = new URL(dest, window.location.href); }
+      catch{ return clerk.navigate(dest); }
+      const unfinished = /continue|factor|verify|sso-callback/i.test(target.hash + target.pathname);
+      if(target.origin === window.location.origin && unfinished && !clerk.user){
+        history.replaceState(null, '', target.href);
+        if(typeof clerk.openSignIn === 'function') clerk.openSignIn(signInModalOptions());
+        return;
+      }
+      return clerk.navigate(dest);
+    });
+  }catch(e){
+    console.error(e);
+    setAuthNote('No se pudo completar el acceso con Google. El álbum sigue en este dispositivo.');
+    if(typeof clerk.openSignIn === 'function' && !clerk.user) clerk.openSignIn(signInModalOptions());
+  }
+}
+
+function signInModalOptions(){
+  const back = clerkRedirectOptions();
+  return {
+    withSignUp: true,
+    forceRedirectUrl: back.signInForceRedirectUrl,
+    fallbackRedirectUrl: back.signInFallbackRedirectUrl,
+    signInForceRedirectUrl: back.signInForceRedirectUrl,
+    signInFallbackRedirectUrl: back.signInFallbackRedirectUrl,
+    signUpForceRedirectUrl: back.signUpForceRedirectUrl,
+    signUpFallbackRedirectUrl: back.signUpFallbackRedirectUrl,
+  };
+}
+
 function onSignInClick(){
   const clerk = window.Clerk;
   if(clerk && clerk.loaded && typeof clerk.openSignIn === 'function' && !clerk.user){
-    const back = clerkRedirectOptions();
-    clerk.openSignIn({
-      forceRedirectUrl: back.signInForceRedirectUrl,
-      fallbackRedirectUrl: back.signInFallbackRedirectUrl,
-      signInForceRedirectUrl: back.signInForceRedirectUrl,
-      signInFallbackRedirectUrl: back.signInFallbackRedirectUrl,
-      signUpForceRedirectUrl: back.signUpForceRedirectUrl,
-      signUpFallbackRedirectUrl: back.signUpFallbackRedirectUrl,
-    });
+    clerk.openSignIn(signInModalOptions());
     return;
   }
   if(clerkFailed || !albumConfig().clerkPublishableKey){
@@ -783,6 +847,7 @@ function activateClerk(){
 }
 
 async function loadClerk(){
+  prepareGoogleReturn();
   const cfg = albumConfig();
   const host = clerkHost(cfg.clerkPublishableKey);
   await loadScript(`https://${host}/npm/@clerk/ui@1/dist/ui.browser.js`);
@@ -802,6 +867,8 @@ async function loadClerk(){
     ui: { ClerkUI: window.__internal_ClerkUICtor },
     ...clerkRedirectOptions(),
   });
+  keepClerkDevBrowserOnReturn(window.Clerk);
+  await finishGoogleReturn();
 }
 
 async function setupAuth(){
