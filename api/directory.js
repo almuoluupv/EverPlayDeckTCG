@@ -1,4 +1,15 @@
-import { PLAN_IDS, mergePlans, planById, sumCardQty } from './plans.js';
+import {
+  MAX_PLAN_MONTHS,
+  PLAN_IDS,
+  activeSubscription,
+  addMonths,
+  formatCode,
+  generateCode,
+  mergePlans,
+  normalizeCode,
+  planById,
+  sumCardQty,
+} from './plans.js';
 
 function httpError(message, status) {
   const err = new Error(message);
@@ -6,7 +17,13 @@ function httpError(message, status) {
   throw err;
 }
 
-export function createDirectory({ users, albums, plans, logs, adminEmail = '' }) {
+function isoDate(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+export function createDirectory({ users, albums, plans, logs, codes, adminEmail = '', now = () => new Date() }) {
   const email = String(adminEmail || '').trim().toLowerCase();
 
   async function readPlans() {
@@ -61,9 +78,17 @@ export function createDirectory({ users, albums, plans, logs, adminEmail = '' })
     },
     async account(userId) {
       const user = await users.findOne({ userId });
+      const current = now();
+      const sub = activeSubscription(user || {}, current);
+      if (user && sub.expired) {
+        await users.updateOne({ userId }, { $set: { planId: 'gratis', planExpiresAt: null, updatedAt: current } });
+      }
       const list = await readPlans();
-      const plan = planById(list, user?.planId || 'gratis');
-      return { isAdmin: Boolean(user?.admin), plan };
+      return {
+        isAdmin: Boolean(user?.admin),
+        plan: planById(list, sub.planId),
+        planExpiresAt: isoDate(sub.planExpiresAt),
+      };
     },
     async addLog(entry) {
       await logs.insert(entry);
@@ -72,25 +97,118 @@ export function createDirectory({ users, albums, plans, logs, adminEmail = '' })
     async listUsers() {
       const rows = await users.list();
       const list = [];
+      const current = now();
       for (const row of rows) {
         const cards = await albums.get(row.userId);
+        const sub = activeSubscription(row, current);
+        if (sub.expired) {
+          await users.updateOne({ userId: row.userId }, { $set: { planId: 'gratis', planExpiresAt: null, updatedAt: current } });
+        }
         list.push({
           userId: row.userId,
           email: row.email || '',
           name: row.name || '',
-          planId: PLAN_IDS.includes(row.planId) ? row.planId : 'gratis',
+          planId: sub.planId,
+          planExpiresAt: isoDate(sub.planExpiresAt),
           admin: Boolean(row.admin),
           cards: sumCardQty(cards),
         });
       }
       return list;
     },
-    async setUserPlan(userId, planId) {
+    async setUserPlan(userId, planId, months) {
       if (!PLAN_IDS.includes(planId)) httpError('Plan desconocido', 400);
       const user = await users.findOne({ userId });
       if (!user) httpError('Usuario no encontrado', 404);
-      await users.updateOne({ userId }, { $set: { planId, updatedAt: new Date() } });
-      return { userId, planId };
+      const current = now();
+      let planExpiresAt = null;
+      if (planId !== 'gratis') {
+        const count = months === undefined || months === null || months === '' ? 1 : Number(months);
+        if (!Number.isInteger(count) || count < 1 || count > MAX_PLAN_MONTHS) {
+          httpError('Los meses tienen que estar entre 1 y 36', 400);
+        }
+        planExpiresAt = addMonths(current, count);
+      }
+      await users.updateOne({ userId }, { $set: { planId, planExpiresAt, updatedAt: current } });
+      return { userId, planId, planExpiresAt: isoDate(planExpiresAt) };
+    },
+    async createCodes({ planId, months, count, createdBy }) {
+      if (!codes) httpError('Códigos no disponibles', 500);
+      if (!PLAN_IDS.includes(planId) || planId === 'gratis') httpError('Elige Colección o Tienda', 400);
+      const span = Number(months);
+      const howMany = count === undefined || count === null || count === '' ? 1 : Number(count);
+      if (!Number.isInteger(span) || span < 1 || span > MAX_PLAN_MONTHS) {
+        httpError('Los meses tienen que estar entre 1 y 36', 400);
+      }
+      if (!Number.isInteger(howMany) || howMany < 1 || howMany > 20) {
+        httpError('Puedes generar entre 1 y 20 códigos', 400);
+      }
+      const created = [];
+      const current = now();
+      for (let i = 0; i < howMany; i += 1) {
+        let stored = '';
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          const candidate = generateCode();
+          try {
+            await codes.insertOne({
+              code: candidate,
+              planId,
+              months: span,
+              createdAt: current,
+              createdBy: createdBy || '',
+              redeemedAt: null,
+              redeemedBy: '',
+            });
+            stored = candidate;
+            break;
+          } catch (err) {
+            if (!err || err.code !== 11000) throw err;
+          }
+        }
+        if (!stored) httpError('No se pudo generar el código', 500);
+        created.push({ code: formatCode(stored), planId, months: span });
+      }
+      return created;
+    },
+    async listCodes() {
+      if (!codes) return [];
+      const rows = await codes.list(200);
+      const known = new Map();
+      for (const row of await users.list()) known.set(row.userId, row.email || '');
+      return rows.map((row) => ({
+        code: formatCode(row.code),
+        planId: PLAN_IDS.includes(row.planId) ? row.planId : 'gratis',
+        months: Number(row.months) || 0,
+        createdAt: isoDate(row.createdAt),
+        redeemedAt: isoDate(row.redeemedAt),
+        redeemedBy: row.redeemedBy ? (known.get(row.redeemedBy) || '') : '',
+      }));
+    },
+    async redeemCode(userId, rawCode) {
+      if (!codes) httpError('Códigos no disponibles', 500);
+      const code = normalizeCode(rawCode);
+      if (!code) httpError('Ese código no es válido', 400);
+      const user = await users.findOne({ userId });
+      if (!user) httpError('Usuario no encontrado', 404);
+      const current = now();
+      const claimed = await codes.claim(code, userId, current);
+      if (!claimed) httpError('Ese código no es válido o ya se usó', 400);
+      try {
+        const active = activeSubscription(user, current);
+        const samePlan = active.planId === claimed.planId && active.planExpiresAt;
+        const start = samePlan ? active.planExpiresAt : current;
+        const planExpiresAt = addMonths(start, Number(claimed.months) || 0);
+        await users.updateOne({ userId }, { $set: { planId: claimed.planId, planExpiresAt, updatedAt: current } });
+        const list = await readPlans();
+        return {
+          isAdmin: Boolean(user.admin),
+          plan: planById(list, claimed.planId),
+          planExpiresAt: planExpiresAt.toISOString(),
+        };
+      } catch (err) {
+        await codes.release(code);
+        throw err;
+      }
     },
     async getPlans() {
       return readPlans();

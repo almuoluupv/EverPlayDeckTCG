@@ -44,9 +44,11 @@ async function openDatabase(uri) {
     const users = db.collection('users');
     const plans = db.collection('plans');
     const logs = db.collection('errorLogs');
+    const codes = db.collection('codes');
     await albums.createIndex({ userId: 1 }, { unique: true });
     await users.createIndex({ userId: 1 }, { unique: true });
     await logs.createIndex({ createdAt: -1 });
+    await codes.createIndex({ code: 1 }, { unique: true });
     return {
       users: {
         async findOne(filter) {
@@ -85,6 +87,24 @@ async function openDatabase(uri) {
         },
         async save(next) {
           await plans.updateOne({ _id: 'current' }, { $set: { plans: next } }, { upsert: true });
+        },
+      },
+      codes: {
+        async insertOne(doc) {
+          await codes.insertOne(doc);
+        },
+        async claim(code, userId, at) {
+          return codes.findOneAndUpdate(
+            { code, redeemedAt: null },
+            { $set: { redeemedAt: at, redeemedBy: userId } },
+            { returnDocument: 'before', projection: { _id: 0 } },
+          );
+        },
+        async release(code) {
+          await codes.updateOne({ code }, { $set: { redeemedAt: null, redeemedBy: '' } });
+        },
+        async list(limit) {
+          return codes.find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(limit).toArray();
         },
       },
       logs: {
@@ -191,8 +211,17 @@ export async function startServer({ env = process.env, verifyTokenImpl = verifyT
       async listUsers() {
         return (await directory()).listUsers();
       },
-      async setUserPlan(userId, planId) {
-        return (await directory()).setUserPlan(userId, planId);
+      async setUserPlan(userId, planId, months) {
+        return (await directory()).setUserPlan(userId, planId, months);
+      },
+      async createCodes(input) {
+        return (await directory()).createCodes(input);
+      },
+      async listCodes() {
+        return (await directory()).listCodes();
+      },
+      async redeemCode(userId, code) {
+        return (await directory()).redeemCode(userId, code);
       },
       async getPlans() {
         return (await directory()).getPlans();

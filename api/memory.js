@@ -3,6 +3,7 @@ export function createMemoryDirectoryDeps() {
   const albumRows = new Map();
   let planRows = null;
   const logRows = [];
+  const codeRows = [];
 
   return {
     users: {
@@ -42,6 +43,37 @@ export function createMemoryDirectoryDeps() {
       },
       async save(next) {
         planRows = next.map((plan) => ({ ...plan }));
+      },
+    },
+    codes: {
+      async insertOne(doc) {
+        if (codeRows.some((row) => row.code === doc.code)) {
+          const err = new Error('duplicado');
+          err.code = 11000;
+          throw err;
+        }
+        codeRows.push({ ...doc });
+      },
+      async claim(code, userId, at) {
+        const row = codeRows.find((item) => item.code === code && item.redeemedAt == null);
+        if (!row) return null;
+        const before = { ...row };
+        row.redeemedAt = at;
+        row.redeemedBy = userId;
+        return before;
+      },
+      async release(code) {
+        const row = codeRows.find((item) => item.code === code);
+        if (!row) return;
+        row.redeemedAt = null;
+        row.redeemedBy = '';
+      },
+      async list(limit) {
+        return codeRows
+          .slice()
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, limit)
+          .map((row) => ({ ...row }));
       },
     },
     logs: {

@@ -5,6 +5,7 @@ import { exceedsPlan, sanitizeClientError, sessionProfile } from './plans.js';
 const MAX_BODY = 1_000_000;
 const ERROR_BODY = 8_000;
 const recentErrors = new Map();
+const recentRedeems = new Map();
 
 function send(res, status, body, extra = {}) {
   const headers = { 'cache-control': 'no-store', ...extra };
@@ -67,8 +68,20 @@ function allowError(key) {
   return true;
 }
 
+function allowRedeem(userId) {
+  const now = Date.now();
+  const hits = (recentRedeems.get(userId) || []).filter((at) => now - at < 10 * 60 * 1000);
+  if (hits.length >= 8) {
+    recentRedeems.set(userId, hits);
+    return false;
+  }
+  hits.push(now);
+  recentRedeems.set(userId, hits);
+  return true;
+}
+
 async function defaultAccount() {
-  return { isAdmin: false, plan: { id: 'gratis', name: 'Gratis', maxCards: 150 } };
+  return { isAdmin: false, plan: { id: 'gratis', name: 'Gratis', maxCards: 150 }, planExpiresAt: null };
 }
 
 export function createApp({ pagesOrigin, verifySession, store }) {
@@ -163,7 +176,12 @@ export function createApp({ pagesOrigin, verifySession, store }) {
       const account = await accountOf(profile.userId);
       if (req.method === 'GET') {
         const cards = await store.get(profile.userId);
-        send(res, 200, { cards, plan: account.plan, isAdmin: account.isAdmin }, cors);
+        send(res, 200, {
+          cards,
+          plan: account.plan,
+          planExpiresAt: account.planExpiresAt || null,
+          isAdmin: account.isAdmin,
+        }, cors);
         return;
       }
       const raw = await readBody(req);
@@ -183,7 +201,30 @@ export function createApp({ pagesOrigin, verifySession, store }) {
         return;
       }
       await store.put(profile.userId, cards);
-      send(res, 200, { cards, plan: account.plan, isAdmin: account.isAdmin }, cors);
+      send(res, 200, {
+        cards,
+        plan: account.plan,
+        planExpiresAt: account.planExpiresAt || null,
+        isAdmin: account.isAdmin,
+      }, cors);
+      return;
+    }
+
+    if (req.method === 'POST' && path === '/api/redeem') {
+      if (!allowRedeem(profile.userId)) {
+        send(res, 429, { error: 'Demasiados intentos. Espera unos minutos.' }, cors);
+        return;
+      }
+      const raw = await readBody(req);
+      let parsed;
+      try {
+        parsed = raw ? JSON.parse(raw) : {};
+      } catch {
+        send(res, 400, { error: 'JSON inválido' }, cors);
+        return;
+      }
+      const saved = await store.redeemCode(profile.userId, parsed.code);
+      send(res, 200, saved, cors);
       return;
     }
 
@@ -198,12 +239,13 @@ export function createApp({ pagesOrigin, verifySession, store }) {
     }
 
     if (req.method === 'GET' && path === '/api/admin') {
-      const [plans, users, logs] = await Promise.all([
+      const [plans, users, logs, codes] = await Promise.all([
         store.getPlans(),
         store.listUsers(),
         store.listLogs(80),
+        typeof store.listCodes === 'function' ? store.listCodes() : [],
       ]);
-      send(res, 200, { plans, users, logs }, cors);
+      send(res, 200, { plans, users, logs, codes }, cors);
       return;
     }
 
@@ -230,8 +272,28 @@ export function createApp({ pagesOrigin, verifySession, store }) {
         send(res, 400, { error: 'JSON inválido' }, cors);
         return;
       }
-      const saved = await store.setUserPlan(String(parsed.userId || ''), String(parsed.planId || ''));
+      const saved = await store.setUserPlan(String(parsed.userId || ''), String(parsed.planId || ''), parsed.months);
       send(res, 200, saved, cors);
+      return;
+    }
+
+    if (req.method === 'POST' && path === '/api/admin/codes') {
+      const raw = await readBody(req);
+      let parsed;
+      try {
+        parsed = raw ? JSON.parse(raw) : {};
+      } catch {
+        send(res, 400, { error: 'JSON inválido' }, cors);
+        return;
+      }
+      const created = await store.createCodes({
+        planId: String(parsed.planId || ''),
+        months: parsed.months,
+        count: parsed.count,
+        createdBy: profile.userId,
+      });
+      const codes = await store.listCodes();
+      send(res, 200, { created, codes }, cors);
       return;
     }
 

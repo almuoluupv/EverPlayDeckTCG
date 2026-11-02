@@ -1,4 +1,8 @@
+import { randomInt } from 'node:crypto';
+
 export const PLAN_IDS = ['gratis', 'coleccion', 'tienda'];
+export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const MAX_PLAN_MONTHS = 36;
 
 export const DEFAULT_PLANS = [
   { id: 'gratis', name: 'Gratis', maxCards: 150 },
@@ -36,6 +40,46 @@ export function mergePlans(saved) {
 export function planById(plans, id) {
   const list = mergePlans(plans);
   return list.find((plan) => plan.id === id) || list[0];
+}
+
+export function addMonths(from, months) {
+  const date = new Date(from.getTime());
+  const day = date.getUTCDate();
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  const last = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(day, last));
+  return date;
+}
+
+export function normalizeCode(value) {
+  const raw = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (raw.length !== 8) return '';
+  for (const ch of raw) {
+    if (!CODE_ALPHABET.includes(ch)) return '';
+  }
+  return raw;
+}
+
+export function formatCode(value) {
+  const code = normalizeCode(value);
+  return code ? `${code.slice(0, 4)}-${code.slice(4)}` : '';
+}
+
+export function generateCode() {
+  let raw = '';
+  for (let i = 0; i < 8; i += 1) raw += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
+  return raw;
+}
+
+export function activeSubscription(user, now = new Date()) {
+  const planId = PLAN_IDS.includes(user?.planId) ? user.planId : 'gratis';
+  const raw = user?.planExpiresAt ? new Date(user.planExpiresAt) : null;
+  const expires = raw && !Number.isNaN(raw.getTime()) ? raw : null;
+  if (planId === 'gratis') return { planId: 'gratis', planExpiresAt: null, expired: false };
+  if (!expires) return { planId, planExpiresAt: null, expired: false };
+  if (expires.getTime() <= now.getTime()) return { planId: 'gratis', planExpiresAt: null, expired: true };
+  return { planId, planExpiresAt: expires, expired: false };
 }
 
 export function sessionProfile(value) {

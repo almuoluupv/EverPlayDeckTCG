@@ -156,6 +156,7 @@
   .account-note{ font-size:13.5px; line-height:1.45; color:var(--muted); margin:8px 0 0; }
   .account-note.bad{ color:var(--danger); }
   .account-note.ok{ color:var(--teal); }
+  input.code-input{ letter-spacing:0.08em; text-transform:uppercase; font-weight:600; }
   input[type="file"]{ display:none; }
 
   h2.section-title{
@@ -541,6 +542,9 @@ const state = {
     touched: false,
     status: 'idle',
     message: '',
+    redeemCode: '',
+    redeemStatus: 'idle',
+    redeemMessage: '',
   },
   sortMode: 'expansion', // 'expansion' | 'price-desc' | 'price-asc'
   expansion: {
@@ -611,7 +615,7 @@ async function sessionToken(){
 }
 
 function clearAccountAccess(){
-  accountAccess = { isAdmin: false, plan: null, maxCards: 0 };
+  accountAccess = { isAdmin: false, plan: null, maxCards: 0, planExpiresAt: '' };
   const link = document.getElementById('adminLink');
   if(link) link.remove();
 }
@@ -670,6 +674,7 @@ function rememberAccount(data){
     isAdmin: Boolean(data && data.isAdmin),
     plan,
     maxCards: plan && Number.isInteger(plan.maxCards) ? plan.maxCards : 0,
+    planExpiresAt: data && data.planExpiresAt ? String(data.planExpiresAt) : '',
   };
   paintAdminLink();
 }
@@ -2764,6 +2769,12 @@ function accountUser(){
   return window.Clerk && window.Clerk.loaded && window.Clerk.user ? window.Clerk.user : null;
 }
 
+function formatPlanEnd(iso){
+  const date = new Date(iso);
+  if(Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('es', { dateStyle: 'long' }).format(date);
+}
+
 function clerkErrorText(err){
   const first = err && Array.isArray(err.errors) ? err.errors[0] : null;
   const text = first && (first.longMessage || first.message);
@@ -2802,13 +2813,28 @@ function renderAccountTab(){
   const planName = plan && plan.name ? plan.name : '';
   const ratio = max ? Math.min(100, Math.round((used / max) * 100)) : 0;
   const noteClass = state.account.status === 'error' ? 'bad' : (state.account.status === 'saved' || state.account.status === 'code' ? 'ok' : '');
+  const redeemClass = state.account.redeemStatus === 'error' ? 'bad' : (state.account.redeemStatus === 'saved' ? 'ok' : '');
+  const ends = accountAccess.planExpiresAt ? formatPlanEnd(accountAccess.planExpiresAt) : '';
+  const planEnd = ends
+    ? `Activo hasta el ${ends}.`
+    : (plan && plan.id && plan.id !== 'gratis' ? 'Este plan no tiene fecha de fin.' : 'El plan Gratis no caduca.');
   html = `<div class="card-box">
     <h2 class="section-title">Tu plan</h2>
     ${planName ? `<p class="hint" style="margin-top:0"><strong style="color:var(--text)">${escapeHtml(planName)}</strong> · hasta ${max} cartas, contando copias.</p>
       <div class="plan-meter" aria-hidden="true"><span style="width:${ratio}%"></span></div>
-      <p class="account-note">${used} de ${max} cartas guardadas en esta cuenta.</p>`
+      <p class="account-note">${used} de ${max} cartas guardadas en esta cuenta.</p>
+      <p class="account-note">${escapeHtml(planEnd)}</p>`
       : `<p class="hint" style="margin-top:0">No se pudo leer el plan. Si acabas de entrar, espera un momento y abre esta pestaña otra vez.</p>`}
-    <p class="account-note">El plan no se cambia desde aquí. Lo asigna quien administra el álbum.</p>
+    <p class="account-note">No puedes elegir el plan a mano. Un código lo cambia hasta que se cumplan los meses.</p>
+  </div>
+  <div class="card-box" style="margin-top:14px">
+    <h2 class="section-title">Canjear un código</h2>
+    <p class="hint" style="margin-top:0">Cada código vale una vez. Si es el mismo plan y aún no ha vencido, se suman los meses. Si es otro plan, empieza a contar desde hoy.</p>
+    <label class="field-label" for="redeemCode">Código</label>
+    <input id="redeemCode" class="code-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" value="${escapeHtml(state.account.redeemCode)}">
+    <div style="height:14px"></div>
+    <button class="btn btn-primary" id="redeemPlan" type="button" ${state.account.redeemStatus === 'saving' ? 'disabled' : ''}>${state.account.redeemStatus === 'saving' ? 'Canjeando…' : 'Canjear código'}</button>
+    ${state.account.redeemMessage ? `<p class="account-note ${redeemClass}">${escapeHtml(state.account.redeemMessage)}</p>` : ''}
   </div>
   <div class="card-box" style="margin-top:14px">
     <h2 class="section-title">Datos del perfil</h2>
@@ -2917,6 +2943,52 @@ async function confirmAccountEmail(){
   render();
 }
 
+async function redeemPlanCode(){
+  if(!accountUser()) return;
+  const raw = state.account.redeemCode.trim();
+  if(!raw){
+    state.account.redeemStatus = 'error';
+    state.account.redeemMessage = 'Escribe el código.';
+    render();
+    return;
+  }
+  if(!albumConfig().apiBase){
+    state.account.redeemStatus = 'error';
+    state.account.redeemMessage = 'No hay conexión con la cuenta.';
+    render();
+    return;
+  }
+  state.account.redeemStatus = 'saving';
+  state.account.redeemMessage = '';
+  render();
+  try{
+    const token = await sessionToken();
+    if(!token) throw new Error('La sesión no está lista. Vuelve a entrar.');
+    const res = await fetch(albumConfig().apiBase + '/api/redeem', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: raw }),
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(e){ data = null; }
+    if(!res.ok) throw new Error(data && data.error ? String(data.error) : 'No se pudo canjear el código.');
+    rememberAccount(data);
+    state.account.redeemCode = '';
+    state.account.redeemStatus = 'saved';
+    const name = data && data.plan && data.plan.name ? data.plan.name : 'nuevo';
+    const when = data && data.planExpiresAt ? formatPlanEnd(data.planExpiresAt) : '';
+    state.account.redeemMessage = when ? `Plan ${name} activo hasta el ${when}.` : `Plan ${name} activo.`;
+  }catch(err){
+    console.error(err);
+    state.account.redeemStatus = 'error';
+    state.account.redeemMessage = err && err.message ? err.message : 'No se pudo canjear el código.';
+  }
+  render();
+}
+
 function updateHeader(){
   const total = state.collection.reduce((n,c)=> n + c.qty, 0);
   document.getElementById('collectionCount').textContent = `${total} ${total===1?'carta':'cartas'}`;
@@ -2963,6 +3035,14 @@ function attachDynamicListeners(){
   if(accountSave) accountSave.addEventListener('click', () => saveAccountProfile());
   const accountConfirm = document.getElementById('accountConfirmEmail');
   if(accountConfirm) accountConfirm.addEventListener('click', () => confirmAccountEmail());
+  const redeemInput = document.getElementById('redeemCode');
+  if(redeemInput){
+    redeemInput.addEventListener('input', () => {
+      state.account.redeemCode = redeemInput.value;
+    });
+  }
+  const redeemPlan = document.getElementById('redeemPlan');
+  if(redeemPlan) redeemPlan.addEventListener('click', () => redeemPlanCode());
   document.querySelectorAll('.chip[data-mode]').forEach(el=>{
     el.addEventListener('click', ()=>{
       if(state.scan.mode === el.dataset.mode) return;
