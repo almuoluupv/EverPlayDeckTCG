@@ -67,7 +67,7 @@
   .totals .val{ font-size:18px; font-weight:700; line-height:1.25;}
   .totals .val.eur{ color: var(--accent); }
   .totals .val.usd{ color: var(--teal); }
-  .auth-slot{ margin-top: 8px; min-height: 22px; }
+  .auth-slot{ margin-top: 8px; min-height: 22px; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
   .auth-note{ color: var(--muted); font-size: 11.5px; line-height: 1.3; }
   .auth-btn{
     background: transparent;
@@ -450,7 +450,11 @@
     <div>
       <h1>Mi Álbum Pokémon</h1>
       <div class="sub" id="collectionCount">0 cartas</div>
-      <div id="authSlot" class="auth-slot"></div>
+      <div id="authSlot" class="auth-slot">
+        <button type="button" class="auth-btn" id="signInBtn">Entrar</button>
+        <span class="auth-note" id="authNote">Álbum en este dispositivo</span>
+        <div id="userButton" hidden></div>
+      </div>
     </div>
     <div class="totals">
       <div class="val eur" id="totalEUR">€0.00</div>
@@ -536,6 +540,17 @@ const state = {
 
 const STORAGE_KEY = 'pokemon_album_collection_v1';
 let authListenerReady = false;
+let clerkFailed = false;
+let userButtonMounted = false;
+
+function accountCacheKey(userId){
+  return STORAGE_KEY + ':account:' + userId;
+}
+
+function currentUserId(){
+  const user = window.Clerk && window.Clerk.user;
+  return user && user.id ? String(user.id) : '';
+}
 
 function albumConfig(){
   const cfg = window.ALBUM_CONFIG || {};
@@ -550,9 +565,9 @@ function remoteAlbumEnabled(){
   return Boolean(cfg.apiBase && cfg.clerkPublishableKey && window.Clerk && window.Clerk.user && window.Clerk.session);
 }
 
-function readLocalCollection(){
+function readStoredCollection(key){
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   }catch(e){
@@ -561,8 +576,8 @@ function readLocalCollection(){
   }
 }
 
-function writeLocalCollection(collection){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(collection));
+function writeStoredCollection(key, collection){
+  localStorage.setItem(key, JSON.stringify(collection));
 }
 
 async function sessionToken(){
@@ -623,51 +638,57 @@ async function hydrateRemoteCards(cards){
 }
 
 async function loadCollection(){
-  const local = readLocalCollection();
   if(!remoteAlbumEnabled()){
-    state.collection = local;
+    state.collection = readStoredCollection(STORAGE_KEY);
     return;
   }
+  const userId = currentUserId();
   try{
     const remote = await fetchRemoteCards();
-    const userId = window.Clerk.user.id;
-    const migrateKey = 'pokemon_album_uploaded_v1:' + userId;
-    if(remote.length === 0 && local.length > 0 && !localStorage.getItem(migrateKey)){
-      state.collection = local;
-      await putRemoteCards(local);
-      localStorage.setItem(migrateKey, '1');
-      showToast('Colección de este dispositivo guardada en tu cuenta');
-      return;
-    }
     state.collection = await hydrateRemoteCards(remote);
-    writeLocalCollection(state.collection);
+    writeStoredCollection(accountCacheKey(userId), state.collection);
   }catch(e){
     console.error('No se pudo leer el álbum de la cuenta', e);
-    state.collection = local;
-    showToast('No se pudo leer la cuenta. Sigo con el álbum de este dispositivo.');
+    state.collection = readStoredCollection(accountCacheKey(userId));
+    showToast('No se pudo leer tu cuenta. Muestro la última copia de esta cuenta.');
   }
 }
 
 async function saveCollection(){
+  const signedIn = remoteAlbumEnabled();
+  const key = signedIn ? accountCacheKey(currentUserId()) : STORAGE_KEY;
   try{
-    writeLocalCollection(state.collection);
+    writeStoredCollection(key, state.collection);
   }catch(e){
     console.error('No se pudo guardar la colección', e);
     showToast('No se pudo guardar (¿modo incógnito o almacenamiento lleno?)');
-    return;
+    if(!signedIn) return;
   }
-  if(!remoteAlbumEnabled()) return;
+  if(!signedIn) return;
   try{
     await putRemoteCards(state.collection);
   }catch(e){
     console.error('No se pudo guardar en la cuenta', e);
-    showToast('No se pudo guardar en la cuenta. Quedó en este dispositivo.');
+    showToast('No se pudo guardar en tu cuenta. Quedó solo la copia de esta cuenta.');
   }
 }
 
 function setAuthNote(text){
-  const slot = document.getElementById('authSlot');
-  if(slot) slot.innerHTML = `<span class="auth-note">${escapeHtml(text)}</span>`;
+  const note = document.getElementById('authNote');
+  if(note) note.textContent = text;
+}
+
+function onSignInClick(){
+  const clerk = window.Clerk;
+  if(clerk && clerk.loaded && typeof clerk.openSignIn === 'function' && !clerk.user){
+    clerk.openSignIn({});
+    return;
+  }
+  if(clerkFailed || !albumConfig().clerkPublishableKey){
+    setAuthNote('Login no disponible. Álbum en este dispositivo.');
+    return;
+  }
+  setAuthNote('Preparando el acceso… El álbum sigue en este dispositivo.');
 }
 
 function clerkHost(publishableKey){
@@ -693,59 +714,87 @@ function loadScript(src, attrs){
 }
 
 function paintAuthSlot(){
-  const slot = document.getElementById('authSlot');
   const clerk = window.Clerk;
-  if(!slot || !clerk || !clerk.loaded) return;
-  if(clerk.user){
-    slot.innerHTML = '<div id="userButton"></div>';
-    const node = document.getElementById('userButton');
-    if(typeof clerk.mountUserButton === 'function') clerk.mountUserButton(node);
+  const btn = document.getElementById('signInBtn');
+  const userNode = document.getElementById('userButton');
+  if(!clerk || !clerk.loaded || !clerk.user){
+    if(btn) btn.hidden = false;
+    if(userNode) userNode.hidden = true;
+    if(!clerkFailed) setAuthNote('Álbum en este dispositivo');
     return;
   }
-  slot.innerHTML = '<button type="button" class="auth-btn" id="signInBtn">Entrar</button>';
-  document.getElementById('signInBtn').addEventListener('click', () => {
-    if(typeof clerk.openSignIn === 'function') clerk.openSignIn({});
+  if(btn) btn.hidden = true;
+  if(userNode){
+    userNode.hidden = false;
+    if(!userButtonMounted && typeof clerk.mountUserButton === 'function'){
+      clerk.mountUserButton(userNode);
+      userButtonMounted = true;
+    }
+  }
+  setAuthNote('Álbum de tu cuenta');
+}
+
+function activateClerk(){
+  clerkFailed = false;
+  if(typeof window.Clerk.addListener === 'function' && !window.Clerk.__albumListener){
+    window.Clerk.__albumListener = true;
+    window.Clerk.addListener(() => {
+      paintAuthSlot();
+      if(!authListenerReady) return;
+      loadCollection().then(() => render());
+    });
+  }
+  paintAuthSlot();
+  authListenerReady = true;
+}
+
+async function loadClerk(){
+  const cfg = albumConfig();
+  const host = clerkHost(cfg.clerkPublishableKey);
+  await loadScript(`https://${host}/npm/@clerk/ui@1/dist/ui.browser.js`);
+  await loadScript(`https://${host}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`, {
+    'data-clerk-publishable-key': cfg.clerkPublishableKey,
   });
+  if(typeof window.Clerk === 'function'){
+    window.Clerk = new window.Clerk(cfg.clerkPublishableKey);
+  }
+  if(!window.Clerk || typeof window.Clerk.load !== 'function'){
+    throw new Error('Clerk no está listo');
+  }
+  await window.Clerk.load();
 }
 
 async function setupAuth(){
   const cfg = albumConfig();
   if(!cfg.clerkPublishableKey){
-    setAuthNote('Álbum en este dispositivo');
+    clerkFailed = true;
+    setAuthNote('Login no disponible. Álbum en este dispositivo.');
     return;
   }
+  const loading = loadClerk();
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Clerk tardó demasiado')), 8000);
+  });
   try{
-    await Promise.race([
-      (async () => {
-        const host = clerkHost(cfg.clerkPublishableKey);
-        await loadScript(`https://${host}/npm/@clerk/ui@1/dist/ui.browser.js`);
-        await loadScript(`https://${host}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`, {
-          'data-clerk-publishable-key': cfg.clerkPublishableKey,
-        });
-        if(typeof window.Clerk === 'function'){
-          window.Clerk = new window.Clerk(cfg.clerkPublishableKey);
-        }
-        if(!window.Clerk || typeof window.Clerk.load !== 'function'){
-          throw new Error('Clerk no está listo');
-        }
-        await window.Clerk.load();
-      })(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Clerk tardó demasiado')), 8000)),
-    ]);
-    if(typeof window.Clerk.addListener === 'function'){
-      window.Clerk.addListener(() => {
-        paintAuthSlot();
-        if(!authListenerReady) return;
-        loadCollection().then(() => render());
-      });
-    }
-    paintAuthSlot();
-    authListenerReady = true;
+    await Promise.race([loading, timeout]);
+    clearTimeout(timeoutId);
+    activateClerk();
   }catch(e){
     console.error(e);
+    clerkFailed = true;
+    const btn = document.getElementById('signInBtn');
+    if(btn) btn.hidden = false;
     setAuthNote('Login no disponible. Álbum en este dispositivo.');
+    loading.then(() => {
+      clearTimeout(timeoutId);
+      activateClerk();
+      loadCollection().then(() => render());
+    }).catch(() => {});
   }
 }
+
+document.getElementById('signInBtn').addEventListener('click', onSignInClick);
 
 function loadOptionalScript(src){
   return new Promise((resolve) => {

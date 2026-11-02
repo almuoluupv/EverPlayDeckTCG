@@ -36,7 +36,7 @@ test('la colección exige el origen de Pages y la sesión', async () => {
   const store = new Map();
   const app = createApp({
     pagesOrigin: 'http://127.0.0.1:43123',
-    verifySession: async (token) => (token === 'buena' ? 'user_1' : null),
+    verifySession: async (token) => (token === 'buena' ? 'user_1' : token === 'otra' ? 'user_2' : null),
     store: {
       async get(userId) {
         return store.get(userId) || [];
@@ -78,10 +78,11 @@ test('la colección exige el origen de Pages y la sesión', async () => {
       path: '/api/collection',
       origin: 'http://127.0.0.1:43123',
       token: 'buena',
-      body: { cards: [{ cardId: 'A1-001', qty: 2 }] },
+      body: { userId: 'user_2', cards: [{ cardId: 'A1-001', qty: 2 }] },
     });
     assert.equal(saved.status, 200);
     assert.deepEqual(saved.json.cards, [{ cardId: 'A1-001', qty: 2 }]);
+    assert.deepEqual(store.get('user_1'), [{ cardId: 'A1-001', qty: 2 }]);
 
     const other = await request(server, {
       method: 'GET',
@@ -89,7 +90,18 @@ test('la colección exige el origen de Pages y la sesión', async () => {
       origin: 'http://127.0.0.1:43123',
       token: 'otra',
     });
-    assert.equal(other.status, 401);
+    assert.equal(other.status, 200);
+    assert.deepEqual(other.json, { cards: [] });
+
+    const otherSave = await request(server, {
+      method: 'PUT',
+      path: '/api/collection',
+      origin: 'http://127.0.0.1:43123',
+      token: 'otra',
+      body: { userId: 'user_1', cards: [{ cardId: 'sv05-1', qty: 1 }] },
+    });
+    assert.equal(otherSave.status, 200);
+    assert.deepEqual(store.get('user_2'), [{ cardId: 'sv05-1', qty: 1 }]);
     assert.deepEqual(store.get('user_1'), [{ cardId: 'A1-001', qty: 2 }]);
   } finally {
     server.close();

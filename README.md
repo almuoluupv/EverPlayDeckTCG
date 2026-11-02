@@ -54,6 +54,6 @@ No hace falta una API key de Render para este repo.
 
 El plan gratuito de Render se duerme tras unos 15 minutos sin visitas y tarda alrededor de un minuto en volver. Si esa primera llamada falla, el álbum de ese momento se queda en el dispositivo.
 
-La primera vez que entras y la cuenta está vacía, se sube el álbum que hubiera en este navegador. Si la cuenta ya tiene cartas, manda la cuenta.
+Sin sesión, el álbum es solo de este navegador. Con sesión, cada cuenta de Clerk lee y guarda únicamente sus cartas. Lo que añadas sin entrar no pasa a la cuenta, y otra persona que entre no ve ese álbum.
 
 Para regenerar hashes en el ordenador: `npm install sharp` y `node compute_hashes.js`. Ese script no forma parte de la web ni de Render.
