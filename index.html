@@ -82,7 +82,7 @@
 
   main{
     flex:1;
-    padding: 18px 16px 100px;
+    padding: 18px 16px calc(100px + env(safe-area-inset-bottom));
     overflow-y:auto;
   }
 
@@ -95,14 +95,16 @@
     max-width:520px;
     margin: 0 auto;
     width:100%;
+    padding-bottom: env(safe-area-inset-bottom);
   }
   nav.tabs button{
-    flex:1;
+    flex:1 1 0;
+    min-width:0;
     background:none;
     border:none;
     color: var(--muted);
     font-family:'Inter', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     font-weight:600;
     padding: 10px 2px 12px;
     display:flex;
@@ -256,17 +258,20 @@
     display:flex; align-items:center; gap:6px; flex-shrink:0;
   }
   .qty button{
-    width:24px; height:24px; border-radius:6px; border:1px solid var(--line);
-    background: var(--surface-2); color: var(--text); font-size:14px; cursor:pointer; line-height:1;
+    width:44px; height:44px; border-radius:10px; border:1px solid var(--line);
+    background: var(--surface-2); color: var(--text); font-size:18px; cursor:pointer; line-height:1;
   }
   .qty .n{ font-size:13px; font-weight:600; min-width:16px; text-align:center; }
   .del{
-    background:none; border:none; color: var(--muted); font-size: 16px; cursor:pointer; padding: 4px 0 4px 8px;
+    background:var(--surface-2); border:1px solid var(--line); color: var(--muted);
+    min-width:44px; height:44px; border-radius:10px; font-size: 16px; cursor:pointer; padding: 0 10px;
   }
+  .del-word{ display:none; }
+  .prices{ flex-wrap:wrap; }
 
   .toast{
     position: fixed;
-    bottom: 78px;
+    bottom: calc(78px + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
     background: var(--surface-2);
@@ -310,7 +315,7 @@
   .zoom-value{min-width:54px;text-align:center;font-weight:700;font-size:14px;}
   .camera-adjust small{display:block;color:var(--muted);line-height:1.4;margin-top:7px;}
   .adjust-actions{display:flex;gap:8px;margin-top:10px;}
-  .adjust-actions .btn{flex:1;}
+  .adjust-actions .btn{flex:1; width:auto; min-height:44px;}
   /* ── Encuadre azul: carta completa ── */
   .roi-card{position:absolute;border:2.5px solid #4a9eff;border-radius:10px;background:rgba(74,158,255,.04);box-shadow:0 0 0 2px rgba(0,0,0,.3);cursor:move;touch-action:none;z-index:3;pointer-events:auto;}
   /* Badge en esquina superior-izquierda, pequeño, no tapa nada importante */
@@ -363,8 +368,8 @@
   .confirm-info strong{ display:block; font-size:15px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .confirm-info span{ font-size:11px; color:var(--muted); }
   .confirm-info .confirm-price{ font-size:12px; color:var(--accent); font-weight:600; margin-top:3px; }
-  .confirm-actions{ display:flex; flex-direction:column; gap:6px; }
-  .confirm-actions .btn{ padding:8px 14px; font-size:13px; white-space:nowrap; }
+  .confirm-actions{ display:flex; flex-direction:row; gap:8px; flex-wrap:wrap; }
+  .confirm-actions .btn{ padding:12px 14px; font-size:14.5px; white-space:nowrap; width:auto; flex:1; min-height:44px; }
   .name-results-header{ font-size:13px; font-weight:600; color:var(--text); margin:12px 0 8px; }
   .name-results-header span{ font-size:11px; font-weight:400; color:var(--muted); margin-left:6px; }
   .name-results-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px; }
@@ -372,9 +377,11 @@
   .name-result-item:active{ border-color:var(--accent); }
   .name-result-item img{ width:100%; border-radius:6px; display:block; margin-bottom:5px; }
   .name-result-item .nri-name{ font-size:10px; font-weight:700; color:var(--text); line-height:1.2; }
-  .name-result-item .nri-set{ font-size:9px; color:var(--muted); margin-top:2px; line-height:1.3; }
+  .name-result-item .nri-set{ font-size:12px; color:var(--muted); margin-top:2px; line-height:1.3; }
 
+  .back-row{
     display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer;
+    background:none; border:none; padding:0; color:inherit; font:inherit;
   }
   .back-row svg{ width:18px; height:18px; stroke: var(--muted); }
   .back-row span{ font-size:13.5px; font-weight:600; color: var(--muted); }
@@ -412,7 +419,7 @@
 
   .checklist-grid{
     display:grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 8px;
   }
   .check-card{
@@ -429,8 +436,8 @@
   .check-card.owned{ box-shadow: 0 0 0 2px var(--accent) inset; }
   .check-card .cc-num{
     position:absolute; bottom:0; left:0; right:0;
-    font-size:9.5px; text-align:center; font-weight:600;
-    background: rgba(0,0,0,0.6); color:#fff; padding:2px 0;
+    font-size:12px; text-align:center; font-weight:600;
+    background: rgba(0,0,0,0.6); color:#fff; padding:3px 0;
   }
   .check-card .cc-qty{
     position:absolute; top:3px; right:3px;
@@ -438,12 +445,63 @@
     font-size:9px; font-weight:700; border-radius:6px; padding:1px 4px;
   }
   .check-card .cc-minus{
-    position:absolute; top:3px; left:3px;
-    width:18px; height:18px; border-radius:50%;
-    background: rgba(0,0,0,0.65); color:#fff; border:none;
-    font-size:13px; line-height:1; font-weight:700;
+    position:absolute; top:0; left:0;
+    width:44px; height:44px; border-radius:0;
+    background: transparent; color:#fff; border:none;
+    display:flex; align-items:flex-start; justify-content:flex-start;
+    cursor:pointer; padding:4px;
+  }
+  .check-card .cc-minus span{
+    width:32px; height:32px; border-radius:50%;
+    background: rgba(0,0,0,0.72);
     display:flex; align-items:center; justify-content:center;
-    cursor:pointer; padding:0;
+    font-size:18px; line-height:1; font-weight:700;
+  }
+
+  button.chip{ font-family:'Inter', sans-serif; }
+  button.set-row{ width:100%; background:none; border:none; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+  .guide-panel{ margin-top:8px; }
+  .scan-layout{ display:flex; flex-direction:column; gap:12px; }
+  .hit{
+    display:flex; flex-direction:column; gap:8px; align-items:stretch;
+    padding:8px; border:1px solid var(--line); border-radius:10px; background:var(--surface);
+  }
+  .hit img{ width:100%; height:auto; aspect-ratio:63/88; object-fit:cover; border-radius:6px; }
+  .hit .btn{ width:100%; min-height:44px; }
+  .hit-qty{ font-weight:700; min-width:32px; text-align:center; }
+  .result-list{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .tool-row{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .tool-row .btn{ width:auto; min-height:44px; }
+  .collection-side{ display:none; }
+  .account-shell{ max-width:560px; margin:0 auto; }
+  .name-row{ display:block; }
+  .account-actions .btn{ width:100%; }
+  .empty .btn{ margin-top:16px; max-width:280px; }
+  .zoom-btn{ width:44px; height:44px; }
+  :focus{ outline:none; }
+  :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  @media (min-width: 360px){
+    .checklist-grid{ grid-template-columns: repeat(4, 1fr); }
+  }
+  @media (min-width: 800px){
+    #app, nav.tabs{ max-width:960px; }
+    .scan-layout{ display:grid; grid-template-columns: minmax(0,1.15fr) minmax(280px, 0.85fr); gap:16px; align-items:start; }
+    .collection-layout{ display:grid; grid-template-columns: minmax(0,1fr) 240px; gap:18px; align-items:start; }
+    .collection-side{ display:block; position:sticky; top:12px; }
+    .result-list{ display:flex; flex-direction:column; }
+    .hit{ flex-direction:row; align-items:center; border:none; border-bottom:1px solid var(--line); border-radius:0; background:transparent; padding:10px 0; }
+    .hit img{ width:54px; height:76px; aspect-ratio:auto; }
+    .hit .btn{ width:auto; }
+    .name-row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .account-actions{ display:flex; justify-content:flex-end; }
+    .account-actions .btn{ width:auto; min-width:180px; }
+    .del-x{ display:none; }
+    .del-word{ display:inline; }
+    .checklist-grid{ grid-template-columns: repeat(6, 1fr); }
+    header.topbar h1{ font-size:26px; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .spinner, .live-status .dot{ animation:none; }
   }
 
   ::-webkit-scrollbar{ width:0; }
@@ -517,6 +575,7 @@ const state = {
     cooldownGuess: '',
     cooldownUntil: 0,
     liveMessage: 'Preparando reconocimiento…',
+    guideOpen: false,
     liveText: '',
     liveError: '',
     livePhase: 'idle', // idle | adjust | scanning
@@ -532,6 +591,8 @@ const state = {
     photo: { image:null, status:'idle', guess:'', results:[], detail:'' }
   },
   search: { query:'', results:[], status:'idle' },
+  collectionQuery: '',
+  collectionError: false,
   account: {
     userId: '',
     firstName: '',
@@ -545,6 +606,7 @@ const state = {
     redeemCode: '',
     redeemStatus: 'idle',
     redeemMessage: '',
+    errorField: '',
   },
   sortMode: 'expansion', // 'expansion' | 'price-desc' | 'price-asc'
   expansion: {
@@ -557,7 +619,8 @@ const state = {
     cardsStatus: 'idle', // idle | loading | error
     cardsError: '',
     cardsCache: {},
-    filter: 'all' // 'all' | 'owned' | 'missing'
+    filter: 'all', // 'all' | 'owned' | 'missing'
+    query: ''
   }
 };
 
@@ -750,10 +813,12 @@ async function loadCollection(){
     const remote = await fetchRemoteAlbum();
     state.collection = await hydrateRemoteCards(remote);
     writeStoredCollection(accountCacheKey(userId), state.collection);
+    state.collectionError = false;
   }catch(e){
     console.error('No se pudo leer el álbum de la cuenta', e);
     reportClientError(e, 'leer-album');
     state.collection = readStoredCollection(accountCacheKey(userId));
+    state.collectionError = true;
     showToast('No se pudo leer tu cuenta. Muestro la última copia de esta cuenta.');
   }
 }
@@ -2259,12 +2324,12 @@ async function settleRecognition({ numberTexts, nameText, cardColor, onStatus, m
     return { ...base, pending: byNumber[0], message: '¿Es esta la carta?' };
   }
   if(byNumber.length > 1){
-    return { ...base, suggestions: byNumber.slice(0, 6), message: '👆 Varias coincidencias. ¿Cuál es?' };
+    return { ...base, suggestions: byNumber.slice(0, 6), message: 'Varias coincidencias. ¿Cuál es?' };
   }
 
   let phashResults = [];
   if(cardColor){
-    if(onStatus) onStatus('📸 Comparando la imagen…');
+    if(onStatus) onStatus('Comparando la imagen…');
     try{ phashResults = await findByPhash(cardColor, 5, 22, detectedSetId); }
     catch(e){ phashResults = []; }
     if(phashResults.length){
@@ -2315,10 +2380,10 @@ async function recognizeCardSurfaces({ numberBin, numberGray, nameBin, nameGray,
   ];
   const numberTexts = [];
   for(const [canvas, psm, label] of numberPasses){
-    if(onStatus) onStatus(`📸 Analizando número (${label})…`);
+    if(onStatus) onStatus(`Analizando número (${label})…`);
     numberTexts.push(await ocrCanvas(canvas, { psmMode: psm }));
   }
-  if(onStatus) onStatus('📸 Leyendo nombre…');
+  if(onStatus) onStatus('Leyendo nombre…');
   const nameA = await ocrCanvas(nameBin, { psmMode: '7' });
   const nameB = await ocrCanvas(nameGray, { psmMode: '7' });
   const nameText = nameA.length >= nameB.length ? nameA : nameB;
@@ -2401,6 +2466,9 @@ function changeQty(id, delta){
   render();
 }
 function removeCard(id){
+  const item = state.collection.find(c => c.id === id);
+  if(!item) return;
+  if(item.qty > 1 && !window.confirm(`Quitar las ${item.qty} copias de ${item.name}`)) return;
   state.collection = state.collection.filter(c => c.id !== id);
   saveCollection();
   render();
@@ -2417,10 +2485,51 @@ function showToast(msg){
 }
 
 /* ---------- render helpers ---------- */
+function confirmPrice(card){
+  if(card && card.cardmarketEUR != null) return '€' + Number(card.cardmarketEUR).toFixed(2);
+  if(card && card.tcgplayerUSD != null) return '$' + Number(card.tcgplayerUSD).toFixed(2);
+  return '';
+}
+
 function priceLine(card){
-  const eur = card.cardmarketEUR != null ? `<span class="p-eur">€${card.cardmarketEUR.toFixed(2)}</span>` : `<span style="color:var(--muted)">Sin precio Cardmarket</span>`;
-  const usd = card.tcgplayerUSD != null ? `<span class="p-usd">$${card.tcgplayerUSD.toFixed(2)}</span>` : `<span style="color:var(--muted)">Sin precio TCGplayer</span>`;
-  return `<div class="prices">${eur}${usd}</div>`;
+  const parts = [];
+  if(card.cardmarketEUR != null) parts.push(`<span class="p-eur">€${Number(card.cardmarketEUR).toFixed(2)}</span>`);
+  if(card.tcgplayerUSD != null) parts.push(`<span class="p-usd">$${Number(card.tcgplayerUSD).toFixed(2)}</span>`);
+  if(!parts.length) return '';
+  return `<div class="prices">${parts.join('')}</div>`;
+}
+
+function confirmCardHTML(card, yesId, noId){
+  const price = confirmPrice(card);
+  return `<div class="confirm-banner">
+    <img src="${card.image}" alt="${escapeHtml(card.name)}">
+    <div class="confirm-info">
+      <strong>${escapeHtml(card.name)}</strong>
+      <span>${escapeHtml(card.setName || '')}${card.number ? ' · #' + escapeHtml(String(card.number)) : ''}</span>
+      ${price ? `<div class="confirm-price">${price}</div>` : ''}
+    </div>
+    <div class="confirm-actions">
+      <button type="button" class="btn btn-ghost" id="${noId}">No es esta</button>
+      <button type="button" class="btn btn-primary" id="${yesId}">Añadir</button>
+    </div>
+  </div>`;
+}
+
+function guideHTML(){
+  return `<button type="button" class="btn btn-ghost" id="guideToggle" style="width:auto;min-height:44px">${state.scan.guideOpen ? 'Ocultar ayuda' : 'Cómo encuadrar'}</button>
+    ${state.scan.guideOpen ? `<div class="guide-panel hint">El recuadro azul cubre la carta entera. El amarillo cubre el número, en la esquina inferior izquierda (por ejemplo 128/182), justo encima del copyright. Acerca la cámara y ajusta el recuadro amarillo a esos dígitos.</div>` : ''}`;
+}
+
+function renderKeeping(id){
+  const el = id ? document.getElementById(id) : null;
+  const start = el ? el.selectionStart : null;
+  const end = el ? el.selectionEnd : null;
+  render();
+  if(!id) return;
+  const again = document.getElementById(id);
+  if(!again) return;
+  again.focus();
+  if(start != null && again.setSelectionRange) again.setSelectionRange(start, end);
 }
 
 function resultCardHTML(card, idx){
@@ -2435,99 +2544,90 @@ function resultCardHTML(card, idx){
 /* ---------- render por pestaña ---------- */
 function renderScanTab(){
   const modeRow = `<div class="mode-row">
-    <div class="chip ${state.scan.mode==='live'?'active':''}" data-mode="live">Cámara en vivo</div>
-    <div class="chip ${state.scan.mode==='photo'?'active':''}" data-mode="photo">Foto individual</div>
+    <button type="button" class="chip ${state.scan.mode==='live'?'active':''}" data-mode="live">Cámara</button>
+    <button type="button" class="chip ${state.scan.mode==='photo'?'active':''}" data-mode="photo">Una foto</button>
   </div>`;
   if(state.scan.mode === 'live') renderScanTabLive(modeRow);
   else renderScanTabPhoto(modeRow);
 }
 
 function renderScanTabLive(modeRow){
-  const s=state.scan;
-  let html=modeRow;
-  html+=`<div class="card-box video-box">`;
+  const s = state.scan;
+  const statusLine = (!s.liveActive || s.livePhase !== 'scanning')
+    ? 'Encaja el número abajo a la izquierda'
+    : (s.liveMessage || 'Leyendo el número…');
+  let stage = '';
   if(s.liveActive){
-    const adjusting = s.livePhase!=='scanning';
-    html+=`<div class="video-wrap">
-      <video id="liveVideo" playsinline muted autoplay></video>
-      <div id="roiCard" class="roi-card"></div>
-      <div id="roiNum" class="roi-num"><div id="roiNumResize" class="roi-num-resize"></div></div>
-      ${s.suggestions.length?`<div class="suggest-banner"><div class="suggest-label">👆 ¿Cuál es la carta?</div><div class="suggest-list">${s.suggestions.map((c,i)=>`<div class="suggest-item" data-suggest-idx="${i}"><img src="${c.image}" loading="lazy"><span>${escapeHtml(c.name)}<small>${escapeHtml(c.setName)} · #${escapeHtml(c.number||'')}</small></span></div>`).join('')}</div></div>`:''}
-    </div>
-    <div class="live-status"><span class="dot"></span><span id="liveStatusText">${escapeHtml(s.liveMessage||'Preparando…')}</span></div>
-    ${s.liveText?`<div class="ocr-debug">${escapeHtml(s.liveText)}</div>`:''}
-    ${s.liveError?`<div class="ocr-error" style="font-size:11px;color:#f66;padding:3px 4px">${escapeHtml(s.liveError)}</div>`:''}
-
-    ${s.pendingConfirm ? (()=>{
-      const c = s.pendingConfirm;
-      const price = c.eur ? `€${c.eur.toFixed(2)}` : (c.usd ? `$${c.usd.toFixed(2)}` : '');
-      return `<div class="confirm-banner">
-        <img src="${c.image}" alt="${escapeHtml(c.name)}">
-        <div class="confirm-info">
-          <strong>${escapeHtml(c.name)}</strong>
-          <span>${escapeHtml(c.setName)} · #${escapeHtml(c.number||'')} / ${c.setTotal}</span>
-          ${price ? `<div class="confirm-price">${price}</div>` : ''}
-        </div>
-        <div class="confirm-actions">
-          <button class="btn btn-primary" id="confirmYesBtn">✅ Sí, esta</button>
-          <button class="btn btn-ghost" id="confirmNoBtn">❌ No es esta</button>
-        </div>
-      </div>`;
-    })() : ''}
-
-    ${s.nameResults.length ? `<div class="name-results-header">
-        Cartas de "${escapeHtml(s.nameResults[0]?.name?.split(' ')[0]||'')}" — toca la correcta
-        <span>${s.nameResults.length} versiones</span>
+    stage = `<div class="card-box video-box">
+      <div class="video-wrap">
+        <video id="liveVideo" playsinline muted autoplay></video>
+        <div id="roiCard" class="roi-card"></div>
+        <div id="roiNum" class="roi-num"><div id="roiNumResize" class="roi-num-resize"></div></div>
       </div>
-      <div class="name-results-grid">
-        ${s.nameResults.map((c,i)=>`
-          <div class="name-result-item" data-name-idx="${i}">
-            <img src="${c.image}" loading="lazy" alt="${escapeHtml(c.name)}">
-            <div class="nri-name">${escapeHtml(c.name)}</div>
-            <div class="nri-set">${escapeHtml(c.setName)}<br>#${escapeHtml(c.number||'')}</div>
-          </div>`).join('')}
-      </div>` : ''}`;    if(adjusting){
-      html+=`<div class="camera-adjust">
-        <div class="roi-legend">
-          <span class="roi-legend-card">■ Azul</span> = carta entera &nbsp;·&nbsp;
-          <span class="roi-legend-num">■ Amarillo</span> = número de carta
-        </div>
-        <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:8px">
-          El número <strong style="color:var(--text)">"128/182"</strong> está impreso en la <strong style="color:var(--accent)">esquina inferior izquierda</strong> de la carta física, justo encima del copyright. Mueve el recuadro amarillo hasta ahí y hazlo pequeño para que solo cubra esos dígitos.
-        </div>
-        <div class="zoom-row" style="margin-top:8px">
-          <button class="btn btn-ghost zoom-btn" id="zoomOutBtn">−</button>
-          <input id="zoomRange" class="zoom-range" type="range" min="${s.zoomMin}" max="${s.zoomMax}" step="${s.zoomStep}" value="${s.zoom}">
-          <button class="btn btn-ghost zoom-btn" id="zoomInBtn">+</button>
-          <span id="zoomValue" class="zoom-value">${s.zoom.toFixed(1)}×</span>
-        </div>
-        <div class="adjust-actions">
-          <button class="btn btn-ghost" id="resetZoomBtn">Restablecer zoom</button>
-          <button class="btn btn-primary" id="beginScanBtn">📸 Capturar y reconocer</button>
-        </div>
+      <div class="live-status"><span class="dot"></span><span id="liveStatusText">${escapeHtml(statusLine)}</span></div>
+      ${s.liveError ? `<p class="account-note bad">${escapeHtml(s.liveError)}</p>` : ''}
+    </div>`;
+  } else {
+    stage = `<div class="card-box"><p class="hint" style="margin-top:0">Encaja el número abajo a la izquierda.</p></div>`;
+  }
+  const adjusting = s.liveActive && s.livePhase !== 'scanning';
+  let actions = guideHTML();
+  if(s.liveActive){
+    actions += `<div class="zoom-row" style="margin-top:12px">
+      <button type="button" class="btn btn-ghost zoom-btn" id="zoomOutBtn">−</button>
+      <input id="zoomRange" class="zoom-range" type="range" min="${s.zoomMin}" max="${s.zoomMax}" step="${s.zoomStep}" value="${s.zoom}" aria-label="Zoom">
+      <button type="button" class="btn btn-ghost zoom-btn" id="zoomInBtn">+</button>
+      <span id="zoomValue" class="zoom-value">${s.zoom.toFixed(1)}×</span>
+    </div>
+    <button type="button" class="btn btn-ghost" id="resetZoomBtn" style="width:auto;min-height:44px;margin-top:8px">Restablecer zoom</button>`;
+    if(adjusting){
+      actions += `<div class="adjust-actions">
+        <button type="button" class="btn btn-ghost" id="stopLiveBtn">Detener</button>
+        <button type="button" class="btn btn-primary" id="beginScanBtn">Capturar</button>
       </div>`;
     } else {
-      html+=`<div class="capture-actions">
-        <button class="btn btn-primary" id="captureAgainBtn">📸 Capturar de nuevo</button>
-        <button class="btn btn-ghost" id="adjustAgainBtn">🎯 Ajustar zona</button>
-        <button class="btn btn-ghost" id="stopLiveBtn">Detener cámara</button>
-      </div>`;
+      actions += `<div class="adjust-actions">
+        <button type="button" class="btn btn-ghost" id="adjustAgainBtn">Ajustar zona</button>
+        <button type="button" class="btn btn-ghost" id="stopLiveBtn">Detener</button>
+      </div>
+      <button type="button" class="btn btn-primary" id="captureAgainBtn" style="margin-top:8px">Capturar</button>`;
     }
   } else {
-    html+=`<p class="hint" style="margin-top:0">Coloca el recuadro <strong>azul</strong> sobre la carta entera y el <strong>amarillo</strong> justo encima del número. Pulsa Capturar cuando estés listo.</p>
-    <button class="btn btn-primary" id="startLiveBtn">Iniciar cámara</button>`;
+    actions += `<button type="button" class="btn btn-primary" id="startLiveBtn" style="margin-top:12px">Iniciar cámara</button>`;
   }
-  html+=`</div>`;
+  let confirm = '';
+  if(s.pendingConfirm){
+    confirm += confirmCardHTML(s.pendingConfirm, 'confirmYesBtn', 'confirmNoBtn');
+  }
+  const extraSuggest = s.pendingConfirm ? s.suggestions : s.suggestions.slice(1);
+  const leadSuggest = !s.pendingConfirm && s.suggestions.length ? s.suggestions[0] : null;
+  if(leadSuggest) confirm += confirmCardHTML(leadSuggest, 'suggestLeadYes', 'suggestLeadNo');
+  if(extraSuggest.length){
+    confirm += `<h2 class="section-title">Otras versiones</h2><div class="suggest-list">${extraSuggest.map((c)=>{
+      const i = s.suggestions.indexOf(c);
+      return `<button type="button" class="suggest-item" data-suggest-idx="${i}"><img src="${c.image}" alt="${escapeHtml(c.name)}" loading="lazy"><span>${escapeHtml(c.name)}</span></button>`;
+    }).join('')}</div>`;
+  }
+  const extraNames = s.nameResults.slice(s.pendingConfirm || leadSuggest ? 0 : 1);
+  const leadName = !s.pendingConfirm && !leadSuggest && s.nameResults.length ? s.nameResults[0] : null;
+  if(leadName) confirm += confirmCardHTML(leadName, 'nameLeadYes', 'nameLeadNo');
+  const nameRest = leadName ? s.nameResults.slice(1) : (s.pendingConfirm || leadSuggest ? s.nameResults : extraNames);
+  if(nameRest.length){
+    confirm += `<h2 class="section-title">Otras versiones</h2><div class="result-grid">${nameRest.map((c)=>{
+      const i = s.nameResults.indexOf(c);
+      return `<button type="button" class="result-card" data-name-idx="${i}"><img src="${c.image}" alt="${escapeHtml(c.name)}" loading="lazy"><div class="rname">${escapeHtml(c.name)}</div><div class="rset">${escapeHtml(c.setName || '')}</div></button>`;
+    }).join('')}</div>`;
+  }
+  let recent = '';
   if(s.recent.length){
-    html+=`<h2 class="section-title">Añadidas en esta sesión</h2>
-    <div class="result-grid">${s.recent.map(c=>`<div class="result-card" style="cursor:default"><img src="${c.image}" loading="lazy"><div class="rname">${escapeHtml(c.name)}</div><div class="rset">${escapeHtml(c.setName)}</div></div>`).join('')}</div>`;
+    recent = `<h2 class="section-title">Añadidas en esta sesión</h2>
+      <div class="result-grid">${s.recent.map(c=>`<div class="result-card" style="cursor:default"><img src="${c.image}" alt="${escapeHtml(c.name)}" loading="lazy"><div class="rname">${escapeHtml(c.name)}</div><div class="rset">${escapeHtml(c.setName || '')}</div></div>`).join('')}</div>`;
   }
-  html+=`<p class="hint">💡 <strong>El número está en la esquina inferior izquierda</strong> de la carta física (ej: "PAR en 128/182"). Acerca la cámara y pon el recuadro amarillo justo ahí. Cuanto más ajustado, mejor.</p>`;
-  document.getElementById('main').innerHTML=html;
+  document.getElementById('main').innerHTML = `${modeRow}<div class="scan-layout"><div class="scan-stage">${stage}</div><div class="scan-side">${actions}${confirm}</div></div>${recent}`;
   if(s.liveActive){
     requestAnimationFrame(()=>{
-      const v=document.getElementById('liveVideo');
-      if(v&&mediaStream){v.srcObject=mediaStream;v.play().catch(()=>{});}
+      const v = document.getElementById('liveVideo');
+      if(v && mediaStream){ v.srcObject = mediaStream; v.play().catch(()=>{}); }
       updateCameraZoomUI(); updateRoiUI(); attachRoiDrag();
     });
   }
@@ -2535,138 +2635,167 @@ function renderScanTabLive(modeRow){
 
 function renderScanTabPhoto(modeRow){
   const s = state.scan.photo;
-  let html = modeRow;
-  html += `<div class="card-box">
+  let stage = `<div class="card-box">
     <h2 class="section-title" style="margin-top:0">Fotografía la carta</h2>
     <label class="btn btn-primary" for="fileInput">Tomar foto o elegir imagen</label>
     <input type="file" id="fileInput" accept="image/*" capture="environment">
-    <p class="hint">Usa el mismo criterio que la cámara: número, código de expansión e imagen. Si no acierta, corrige el nombre y busca.</p>
   </div>`;
-
   if(s.image){
-    html += `<h2 class="section-title">Vista previa</h2>
-    <div class="card-box">
+    stage += `<div class="card-box" style="margin-top:14px">
       <div class="preview-wrap">
         <img src="${s.image}" alt="Carta escaneada">
-        <div style="flex:1">
-          <div class="status-line">
-            ${s.status === 'ocr' ? `<span class="spinner"></span> <span id="photoStatusText">${escapeHtml(s.detail || 'Leyendo la carta…')}</span>` : ''}
-            ${s.status === 'searching' ? '<span class="spinner"></span> Buscando coincidencias…' : ''}
-            ${s.status === 'done' ? escapeHtml(s.detail || 'Confirma la carta o corrige el nombre.') : ''}
-            ${s.status === 'error' ? 'No se pudo leer la imagen. Escribe el nombre manualmente.' : ''}
-          </div>
+        <div class="status-line">
+          ${s.status === 'ocr' ? `<span class="spinner"></span> <span id="photoStatusText">${escapeHtml(s.detail || 'Leyendo la carta…')}</span>` : ''}
+          ${s.status === 'searching' ? '<span class="spinner"></span> Buscando coincidencias…' : ''}
+          ${s.status === 'done' ? escapeHtml(s.detail || 'Confirma la carta o corrige el nombre.') : ''}
+          ${s.status === 'error' ? 'No se pudo leer la imagen. Escribe el nombre.' : ''}
         </div>
       </div>
-      <input type="text" id="guessInput" placeholder="Nombre de la carta" value="${s.guess.replace(/"/g,'&quot;')}">
-      <div style="height:10px"></div>
-      <button class="btn btn-ghost" id="scanSearchBtn" style="width:100%">Buscar esta carta</button>
     </div>`;
   }
-
+  let side = `<label class="field-label" for="guessInput">Nombre, si hay que corregirlo</label>
+    <input type="text" id="guessInput" placeholder="Nombre de la carta" value="${escapeHtml(s.guess || '')}">
+    <div style="height:10px"></div>
+    <button type="button" class="btn btn-ghost" id="scanSearchBtn">Buscar esta carta</button>`;
   if(s.results.length){
-    html += `<h2 class="section-title">Elige la carta correcta (${s.results.length})</h2>
-    <div class="result-grid" id="scanResults">
-      ${s.results.map((c,i)=>resultCardHTML(c,i)).join('')}
-    </div>`;
+    side += confirmCardHTML(s.results[0], 'photoLeadYes', 'photoLeadNo');
+    if(s.results.length > 1){
+      side += `<h2 class="section-title">Otras versiones</h2><div class="result-grid">${s.results.slice(1).map((c,i)=>`
+        <button type="button" class="result-card" data-add-idx="${i+1}">
+          <img src="${c.image}" alt="${escapeHtml(c.name)}" loading="lazy">
+          <div class="rname">${escapeHtml(c.name)}</div>
+          <div class="rset">${escapeHtml(c.setName || '')}</div>
+        </button>`).join('')}</div>`;
+    }
   } else if(s.status === 'done'){
-    html += `<p class="hint">Sin coincidencias. Prueba a escribir el nombre exacto.</p>`;
+    side += `<p class="hint">Sin coincidencias. Prueba a escribir el nombre exacto.</p>`;
   }
-
-  document.getElementById('main').innerHTML = html;
+  document.getElementById('main').innerHTML = `${modeRow}<div class="scan-layout"><div class="scan-stage">${stage}</div><div class="scan-side">${side}</div></div>`;
 }
+
 
 function renderSearchTab(){
   const s = state.search;
   let html = `<div class="card-box">
-    <h2 class="section-title" style="margin-top:0">Busca por nombre</h2>
-    <input type="text" id="searchInput" placeholder="Ej. Pikachu, Charizard…" value="${s.query.replace(/"/g,'&quot;')}">
-    <div style="height:10px"></div>
-    <button class="btn btn-primary" id="searchBtn">Buscar</button>
+    <label class="field-label" for="searchInput" style="margin-top:0">Busca por nombre</label>
+    <input type="text" id="searchInput" placeholder="Ej. Pikachu, Charizard…" value="${escapeHtml(s.query)}">
   </div>`;
-
   if(s.status === 'searching'){
     html += `<p class="hint"><span class="spinner"></span> Buscando…</p>`;
   }else if(s.status === 'error'){
-    html += `<p class="hint">Hubo un problema al consultar la API. Inténtalo de nuevo.</p>`;
+    html += `<div class="card-box" style="margin-top:14px"><p class="hint" style="margin-top:0">No se pudo cargar el catálogo.</p>
+      <button type="button" class="btn btn-ghost" id="searchRetry">Reintentar</button></div>`;
   }else if(s.results.length){
-    html += `<h2 class="section-title">Resultados (${s.results.length})</h2>
-    <div class="result-grid" id="searchResults">
-      ${s.results.map((c,i)=>resultCardHTML(c,i)).join('')}
-    </div>`;
+    html += `<h2 class="section-title">Resultados (${s.results.length})</h2><div class="result-list" id="searchResults">
+      ${s.results.map((c,i)=>searchHitHTML(c,i)).join('')}</div>`;
   }else if(s.status === 'done'){
-    html += `<p class="hint">Sin resultados para "${s.query}".</p>`;
+    html += `<p class="hint">Nada con ese nombre en el catálogo.</p>`;
+  }else{
+    html += `<p class="hint">Escribe un nombre, por ejemplo Pikachu.</p>`;
   }
-
   document.getElementById('main').innerHTML = html;
 }
 
+function searchHitHTML(card, idx){
+  const owned = state.collection.find(c => c.id === card.id);
+  return `<article class="hit">
+    <img src="${card.image}" alt="${escapeHtml(card.name)}" loading="lazy">
+    <div class="info">
+      <div class="rname">${escapeHtml(card.name)}</div>
+      <div class="rmeta">${escapeHtml(card.setName || '')}${card.number ? ' · #' + escapeHtml(String(card.number)) : ''}</div>
+      ${priceLine(card)}
+    </div>
+    ${owned ? `<span class="hit-qty">×${owned.qty}</span>` : ''}
+    <button type="button" class="btn btn-ghost" data-add-idx="${idx}">Añadir</button>
+  </article>`;
+}
+
+function collectionTotals(){
+  const copies = state.collection.reduce((n,c)=> n + c.qty, 0);
+  const eur = state.collection.reduce((s,c)=> s + (c.cardmarketEUR||0)*c.qty, 0);
+  const usd = state.collection.reduce((s,c)=> s + (c.tcgplayerUSD||0)*c.qty, 0);
+  return { copies, eur, usd };
+}
+
 function renderCollectionTab(){
-  const col = state.collection;
-  let html = `<div class="sort-row">
-    <div class="chip ${state.sortMode==='expansion'?'active':''}" data-sort="expansion">Por expansión</div>
-    <div class="chip ${state.sortMode==='price-desc'?'active':''}" data-sort="price-desc">Precio ↓</div>
-    <div class="chip ${state.sortMode==='price-asc'?'active':''}" data-sort="price-asc">Precio ↑</div>
+  const q = state.collectionQuery.trim().toLowerCase();
+  const col = state.collection.filter(c => !q || (c.name || '').toLowerCase().includes(q) || (c.setName || '').toLowerCase().includes(q));
+  const totals = collectionTotals();
+  let tools = `<div class="sort-row">
+    <button type="button" class="chip ${state.sortMode==='expansion'?'active':''}" data-sort="expansion">Por expansión</button>
+    <button type="button" class="chip ${state.sortMode==='price-desc'?'active':''}" data-sort="price-desc">Precio ↓</button>
+    <button type="button" class="chip ${state.sortMode==='price-asc'?'active':''}" data-sort="price-asc">Precio ↑</button>
+  </div>
+  <label class="field-label" for="collectionQuery">Buscar en el álbum</label>
+  <input type="text" id="collectionQuery" placeholder="Nombre de la carta" value="${escapeHtml(state.collectionQuery)}">
+  <div class="tool-row" style="margin-top:12px">
+    <button type="button" class="btn btn-ghost" id="exportCollectionBtn">Exportar</button>
+    <label class="btn btn-ghost" for="importCollectionInput">Importar</label>
+    <input type="file" id="importCollectionInput" accept="application/json">
   </div>`;
-
-  html += `<div style="display:flex; gap:16px; margin-bottom:16px;">
-    <span id="exportCollectionBtn" style="font-size:12px; color:var(--muted); text-decoration:underline; cursor:pointer;">Exportar colección</span>
-    <label for="importCollectionInput" style="font-size:12px; color:var(--muted); text-decoration:underline; cursor:pointer;">Importar colección</label>
-    <input type="file" id="importCollectionInput" accept="application/json" style="display:none">
-  </div>`;
-
-  if(col.length === 0){
-    html += `<div class="empty">
+  if(state.collectionError){
+    tools += `<div class="card-box" style="margin-bottom:14px"><p class="hint" style="margin-top:0">No se pudo leer tu cuenta. Muestro la última copia de esta cuenta.</p>
+      <button type="button" class="btn btn-ghost" id="retryCollection">Reintentar</button></div>`;
+  }
+  let list = '';
+  if(state.collection.length === 0){
+    list = `<div class="empty">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9.5h16"/></svg>
       <p>Tu álbum está vacío.<br>Escanea o busca una carta para empezar.</p>
+      <button type="button" class="btn btn-primary" id="goScan">Escanear una carta</button>
     </div>`;
-    document.getElementById('main').innerHTML = html;
-    return;
-  }
-
-  const priceOf = (c) => c.cardmarketEUR != null ? c.cardmarketEUR : (c.tcgplayerUSD != null ? c.tcgplayerUSD : -1);
-
-  if(state.sortMode === 'expansion'){
-    const groups = {};
-    col.forEach(c=>{
-      if(!groups[c.setName]) groups[c.setName] = { order: setOrderFor(c.setId, c.setName), items: [] };
-      groups[c.setName].items.push(c);
-    });
-    const groupNames = Object.keys(groups).sort((a,b)=> groups[b].order - groups[a].order);
-    groupNames.forEach(name=>{
-      const items = groups[name].items.sort((a,b)=> priceOf(b) - priceOf(a));
-      const subtotalEUR = items.reduce((s,c)=> s + (c.cardmarketEUR||0)*c.qty, 0);
-      html += `<div class="group-header">
-        <div class="gname">${name}</div>
-        <div class="gcount">${items.length} ${items.length===1?'carta':'cartas'} · €${subtotalEUR.toFixed(2)}</div>
-      </div>`;
-      items.forEach(c=> html += rowHTML(c));
-    });
+  }else if(col.length === 0){
+    list = `<p class="hint">Nada con ese nombre en el álbum.</p>`;
   }else{
-    const sorted = [...col].sort((a,b)=> state.sortMode==='price-desc' ? priceOf(b)-priceOf(a) : priceOf(a)-priceOf(b));
-    sorted.forEach(c=> html += rowHTML(c));
+    const priceOf = (c) => c.cardmarketEUR != null ? c.cardmarketEUR : (c.tcgplayerUSD != null ? c.tcgplayerUSD : -1);
+    if(state.sortMode === 'expansion'){
+      const groups = {};
+      col.forEach(c=>{
+        const name = c.setName || 'Sin expansión';
+        if(!groups[name]) groups[name] = { order: setOrderFor(c.setId, c.setName), items: [] };
+        groups[name].items.push(c);
+      });
+      Object.keys(groups).sort((a,b)=> groups[b].order - groups[a].order).forEach(name=>{
+        const items = groups[name].items.sort((a,b)=> priceOf(b) - priceOf(a));
+        const subtotalEUR = items.reduce((s,c)=> s + (c.cardmarketEUR||0)*c.qty, 0);
+        list += `<div class="group-header"><div class="gname">${escapeHtml(name)}</div><div class="gcount">${items.length} ${items.length===1?'carta':'cartas'} · €${subtotalEUR.toFixed(2)}</div></div>`;
+        items.forEach(c => { list += rowHTML(c); });
+      });
+    }else{
+      const sorted = [...col].sort((a,b)=> state.sortMode==='price-desc' ? priceOf(b)-priceOf(a) : priceOf(a)-priceOf(b));
+      sorted.forEach(c => { list += rowHTML(c); });
+    }
   }
-
-  document.getElementById('main').innerHTML = html;
+  const plan = accountAccess.plan;
+  const end = accountAccess.planExpiresAt ? formatPlanEnd(accountAccess.planExpiresAt) : '';
+  const side = `<aside class="collection-side card-box">
+    <h2 class="section-title">Resumen</h2>
+    <p class="account-note" style="margin-top:0">${totals.copies} ${totals.copies===1?'copia':'copias'}</p>
+    <p class="account-note">€${totals.eur.toFixed(2)}</p>
+    <p class="account-note">$${totals.usd.toFixed(2)}</p>
+    ${plan && plan.name ? `<p class="account-note">Plan ${escapeHtml(plan.name)}</p>` : ''}
+    ${end ? `<p class="account-note">hasta el ${escapeHtml(end)}</p>` : ''}
+  </aside>`;
+  document.getElementById('main').innerHTML = tools + `<div class="collection-layout"><div class="collection-main">${list}</div>${side}</div>`;
 }
 
 function rowHTML(c){
   return `<div class="row">
-    <img src="${c.image}" alt="${c.name}">
+    <img src="${c.image}" alt="${escapeHtml(c.name)}">
     <div class="info">
-      <div class="rname">${c.name}</div>
-      <div class="rmeta">${c.setName}${c.number ? ' · #' + c.number : ''}</div>
+      <div class="rname">${escapeHtml(c.name)}</div>
+      <div class="rmeta">${escapeHtml(c.setName || '')}${c.number ? ' · #' + escapeHtml(String(c.number)) : ''}</div>
       ${priceLine(c)}
     </div>
     <div class="qty">
-      <button data-qty="-1" data-id="${c.id}">−</button>
+      <button type="button" data-qty="-1" data-id="${c.id}" aria-label="Quitar una copia">−</button>
       <span class="n">${c.qty}</span>
-      <button data-qty="1" data-id="${c.id}">+</button>
+      <button type="button" data-qty="1" data-id="${c.id}" aria-label="Añadir una copia">+</button>
     </div>
-    <button class="del" data-remove="${c.id}">✕</button>
+    <button type="button" class="del" data-remove="${c.id}" aria-label="Quitar"><span class="del-x">✕</span><span class="del-word">Quitar</span></button>
   </div>`;
 }
 
-/* ---------- pestaña de expansiones ---------- */
 function renderExpansionTab(){
   if(state.expansion.view === 'cards' && state.expansion.selectedSet) renderExpansionCards();
   else renderExpansionSets();
@@ -2674,38 +2803,42 @@ function renderExpansionTab(){
 
 function renderExpansionSets(){
   const e = state.expansion;
-  let html = `<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px;">
+  let html = `<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
     <h2 class="section-title" style="margin:0">Elige una expansión</h2>
-    ${e.sets ? `<span id="refreshSets" style="font-size:11.5px; color:var(--muted); text-decoration:underline; cursor:pointer;">Actualizar catálogo</span>` : ''}
-  </div>`;
-
+    ${e.sets ? `<button type="button" class="btn btn-ghost" id="refreshSets" style="width:auto;min-height:44px">Actualizar catálogo</button>` : ''}
+  </div>
+  <label class="field-label" for="setQuery">Nombre de la expansión</label>
+  <input type="text" id="setQuery" placeholder="Nombre de la expansión" value="${escapeHtml(e.query || '')}">`;
   if(e.setsStatus === 'loading' || e.sets === null){
     html += `<p class="hint"><span class="spinner"></span> Cargando expansiones…</p>`;
     document.getElementById('main').innerHTML = html;
     return;
   }
   if(e.setsStatus === 'error'){
-    html += `<p class="hint">No se pudieron cargar las expansiones.${e.setsError ? ' (' + e.setsError + ')' : ''}</p>
-      <button class="btn btn-ghost" id="retryLoadSets" style="width:100%">Reintentar</button>`;
+    html += `<p class="hint">No se pudieron cargar las expansiones.</p>
+      <button type="button" class="btn btn-ghost" id="retryLoadSets">Reintentar</button>`;
     document.getElementById('main').innerHTML = html;
     return;
   }
-
-  html += `<div class="set-list">` + e.sets.map(s=>{
-    const owned = ownedCountForSet(s.id, s.name);
-    const total = s.total || 0;
-    const pct = total ? Math.min(100, Math.round((owned/total)*100)) : 0;
-    return `<div class="set-row" data-set-id="${s.id}">
-      <img class="set-logo" src="${s.symbol || ''}" alt="${s.name}" loading="lazy" onerror="this.style.visibility='hidden'">
-      <div class="set-info">
-        <div class="set-name">${s.name}</div>
-        <div class="set-meta">${s.id}</div>
-        <div class="set-progress-bar"><div class="fill" style="width:${pct}%"></div></div>
-      </div>
-      <div class="set-count">${owned}/${total || '?'}</div>
-    </div>`;
-  }).join('') + `</div>`;
-
+  const q = (e.query || '').trim().toLowerCase();
+  const sets = e.sets.filter(s => !q || (s.name || '').toLowerCase().includes(q));
+  if(!sets.length){
+    html += `<p class="hint">Ninguna expansión con ese nombre.</p>`;
+  }else{
+    html += `<div class="set-list">` + sets.map(s=>{
+      const owned = ownedCountForSet(s.id, s.name);
+      const total = s.total || 0;
+      const pct = total ? Math.min(100, Math.round((owned/total)*100)) : 0;
+      return `<button type="button" class="set-row" data-set-id="${escapeHtml(s.id)}">
+        <img class="set-logo" src="${s.symbol || ''}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+        <div class="set-info">
+          <div class="set-name">${escapeHtml(s.name)}</div>
+          <div class="set-progress-bar"><div class="fill" style="width:${pct}%"></div></div>
+        </div>
+        <div class="set-count">${owned}/${total || '?'} · ${pct}%</div>
+      </button>`;
+    }).join('') + `</div>`;
+  }
   document.getElementById('main').innerHTML = html;
 }
 
@@ -2714,37 +2847,35 @@ function renderExpansionCards(){
   const set = e.selectedSet;
   const owned = ownedCountForSet(set.id, set.name);
   const total = set.total || e.cards.length;
-
-  let html = `<div class="back-row" id="expBackBtn">
+  const ownedIds = new Set(state.collection.map(c=>c.id));
+  const nOwned = e.cards.filter(c => ownedIds.has(c.id)).length;
+  const nMissing = Math.max(0, e.cards.length - nOwned);
+  let html = `<button type="button" class="back-row" id="expBackBtn">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
     <span>Expansiones</span>
-  </div>`;
-
-  html += `<div class="set-header">
-    <img src="${set.symbol || ''}" alt="${set.name}" onerror="this.style.visibility='hidden'">
+  </button>
+  <div class="set-header">
+    <img src="${set.symbol || ''}" alt="" onerror="this.style.visibility='hidden'">
     <div>
-      <div class="shname">${set.name}</div>
+      <div class="shname">${escapeHtml(set.name)}</div>
       <div class="shcount">${owned} de ${total} cartas</div>
     </div>
+  </div>
+  <p class="hint" style="margin-top:0">Toca una carta para añadirla.</p>
+  <div class="exp-filter-row">
+    <button type="button" class="chip ${e.filter==='all'?'active':''}" data-expfilter="all">Todas · ${e.cards.length}</button>
+    <button type="button" class="chip ${e.filter==='owned'?'active':''}" data-expfilter="owned">Las tengo · ${nOwned}</button>
+    <button type="button" class="chip ${e.filter==='missing'?'active':''}" data-expfilter="missing">Me faltan · ${nMissing}</button>
   </div>`;
-
-  html += `<div class="exp-filter-row">
-    <div class="chip ${e.filter==='all'?'active':''}" data-expfilter="all">Todas</div>
-    <div class="chip ${e.filter==='owned'?'active':''}" data-expfilter="owned">Las tengo</div>
-    <div class="chip ${e.filter==='missing'?'active':''}" data-expfilter="missing">Me faltan</div>
-  </div>`;
-
   if(e.cardsStatus === 'loading'){
     html += `<p class="hint"><span class="spinner"></span> Cargando cartas de la expansión…</p>`;
   }else if(e.cardsStatus === 'error'){
-    html += `<p class="hint">No se pudieron cargar las cartas de esta expansión.${e.cardsError ? ' (' + e.cardsError + ')' : ''}</p>
-      <button class="btn btn-ghost" id="retryLoadCards" style="width:100%">Reintentar</button>`;
+    html += `<p class="hint">No se pudieron cargar las cartas de esta expansión.</p>
+      <button type="button" class="btn btn-ghost" id="retryLoadCards">Reintentar</button>`;
   }else{
-    const ownedIds = new Set(state.collection.map(c=>c.id));
     let cards = e.cards;
     if(e.filter === 'owned') cards = cards.filter(c => ownedIds.has(c.id));
     else if(e.filter === 'missing') cards = cards.filter(c => !ownedIds.has(c.id));
-
     if(cards.length === 0){
       html += `<p class="hint">No hay cartas que mostrar con este filtro.</p>`;
     }else{
@@ -2752,16 +2883,14 @@ function renderExpansionCards(){
         const isOwned = ownedIds.has(c.id);
         const qty = qtyForCardId(c.id);
         return `<div class="check-card ${isOwned?'owned':'unowned'}" data-card-id="${c.id}">
-          <img src="${c.image}" alt="${c.name}" loading="lazy">
-          <div class="cc-num">#${c.number}</div>
-          ${isOwned ? `<button class="cc-minus" data-minus-id="${c.id}" title="Quitar una copia">−</button>` : ''}
+          <img src="${c.image}" alt="${escapeHtml(c.name)}" loading="lazy">
+          <div class="cc-num">#${escapeHtml(String(c.number || ''))}</div>
+          ${isOwned ? `<button type="button" class="cc-minus" data-minus-id="${c.id}" aria-label="Quitar una copia"><span>−</span></button>` : ''}
           ${isOwned && qty > 1 ? `<div class="cc-qty">x${qty}</div>` : ''}
         </div>`;
-      }).join('') + `</div>
-      <p class="hint">Toca una carta para añadirla al álbum (o sumar otra copia). Para quitarla o corregir la cantidad, usa la pestaña Colección.</p>`;
+      }).join('') + `</div>`;
     }
   }
-
   document.getElementById('main').innerHTML = html;
 }
 
@@ -2796,14 +2925,12 @@ function ensureAccountDraft(){
 
 function renderAccountTab(){
   const user = accountUser();
-  let html = '';
   if(!user){
-    html = `<div class="card-box">
-      <h2 class="section-title">Tu cuenta</h2>
-      <p class="hint" style="margin-top:0">Entra para ver tu plan, el tope de cartas y los datos de tu perfil. Sin sesión, el álbum se queda solo en este dispositivo.</p>
+    document.getElementById('main').innerHTML = `<div class="account-shell"><div class="card-box">
+      <h2 class="section-title">Tu plan</h2>
+      <p class="hint" style="margin-top:0">Entra para ver tu plan.</p>
       <button class="btn btn-primary" id="accountSignIn" type="button">Entrar</button>
-    </div>`;
-    document.getElementById('main').innerHTML = html;
+    </div></div>`;
     return;
   }
   ensureAccountDraft();
@@ -2812,54 +2939,60 @@ function renderAccountTab(){
   const plan = accountAccess.plan;
   const planName = plan && plan.name ? plan.name : '';
   const ratio = max ? Math.min(100, Math.round((used / max) * 100)) : 0;
-  const noteClass = state.account.status === 'error' ? 'bad' : (state.account.status === 'saved' || state.account.status === 'code' ? 'ok' : '');
-  const redeemClass = state.account.redeemStatus === 'error' ? 'bad' : (state.account.redeemStatus === 'saved' ? 'ok' : '');
   const ends = accountAccess.planExpiresAt ? formatPlanEnd(accountAccess.planExpiresAt) : '';
-  const planEnd = ends
-    ? `Activo hasta el ${ends}.`
-    : (plan && plan.id && plan.id !== 'gratis' ? 'Este plan no tiene fecha de fin.' : 'El plan Gratis no caduca.');
-  html = `<div class="card-box">
-    <h2 class="section-title">Tu plan</h2>
-    ${planName ? `<p class="hint" style="margin-top:0"><strong style="color:var(--text)">${escapeHtml(planName)}</strong> · hasta ${max} cartas, contando copias.</p>
-      <div class="plan-meter" aria-hidden="true"><span style="width:${ratio}%"></span></div>
-      <p class="account-note">${used} de ${max} cartas guardadas en esta cuenta.</p>
-      <p class="account-note">${escapeHtml(planEnd)}</p>`
-      : `<p class="hint" style="margin-top:0">No se pudo leer el plan. Si acabas de entrar, espera un momento y abre esta pestaña otra vez.</p>`}
-    <p class="account-note">No puedes elegir el plan a mano. Un código lo cambia hasta que se cumplan los meses.</p>
-  </div>
-  <div class="card-box" style="margin-top:14px">
-    <h2 class="section-title">Canjear un código</h2>
-    <p class="hint" style="margin-top:0">Cada código vale una vez. Si es el mismo plan y aún no ha vencido, se suman los meses. Si es otro plan, empieza a contar desde hoy.</p>
-    <label class="field-label" for="redeemCode">Código</label>
-    <input id="redeemCode" class="code-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" value="${escapeHtml(state.account.redeemCode)}">
-    <div style="height:14px"></div>
-    <button class="btn btn-primary" id="redeemPlan" type="button" ${state.account.redeemStatus === 'saving' ? 'disabled' : ''}>${state.account.redeemStatus === 'saving' ? 'Canjeando…' : 'Canjear código'}</button>
-    ${state.account.redeemMessage ? `<p class="account-note ${redeemClass}">${escapeHtml(state.account.redeemMessage)}</p>` : ''}
-  </div>
-  <div class="card-box" style="margin-top:14px">
-    <h2 class="section-title">Datos del perfil</h2>
-    <p class="hint" style="margin-top:0">Nombre y correo de la cuenta con la que entras. El correo nuevo solo queda activo cuando confirmas el código que te llega.</p>
-    <label class="field-label" for="accountFirst">Nombre</label>
-    <input id="accountFirst" type="text" autocomplete="given-name" value="${escapeHtml(state.account.firstName)}">
-    <label class="field-label" for="accountLast">Apellidos</label>
-    <input id="accountLast" type="text" autocomplete="family-name" value="${escapeHtml(state.account.lastName)}">
-    <label class="field-label" for="accountEmail">Correo</label>
-    <input id="accountEmail" type="email" autocomplete="email" value="${escapeHtml(state.account.email)}">
-    ${state.account.pendingEmailId ? `<label class="field-label" for="accountCode">Código del correo</label>
-      <input id="accountCode" type="text" inputmode="numeric" autocomplete="one-time-code" value="${escapeHtml(state.account.code)}" placeholder="Código que te llegó">
+  const redeemed = state.account.redeemStatus === 'saved' && state.account.redeemMessage;
+  const planEnd = redeemed
+    ? state.account.redeemMessage
+    : (ends ? `Activo hasta el ${ends}.` : (plan && plan.id === 'gratis' ? 'El plan Gratis no caduca.' : (plan && plan.id ? 'Este plan no tiene fecha de fin.' : '')));
+  const redeemClass = state.account.redeemStatus === 'error' ? 'bad' : '';
+  const nameErr = state.account.errorField === 'name' && state.account.status === 'error';
+  const emailErr = state.account.errorField === 'email' && state.account.status === 'error';
+  document.getElementById('main').innerHTML = `<div class="account-shell">
+    <div class="card-box">
+      <h2 class="section-title">Tu plan</h2>
+      ${planName ? `<p class="hint" style="margin-top:0"><strong style="color:var(--text)">${escapeHtml(planName)}</strong></p>
+        <p class="account-note">${used} de ${max} copias</p>
+        <div class="plan-meter" role="meter" aria-valuemin="0" aria-valuemax="${max || 0}" aria-valuenow="${Math.min(used, max || used)}" aria-label="${used} de ${max}"><span style="width:${ratio}%"></span></div>
+        ${planEnd ? `<p class="account-note ${redeemed ? 'ok' : ''}">${escapeHtml(planEnd)}</p>` : ''}`
+        : `<p class="hint" style="margin-top:0">No se pudo leer el plan. Si acabas de entrar, espera un momento y abre esta pestaña otra vez.</p>`}
+      <label class="field-label" for="redeemCode">Código</label>
+      <input id="redeemCode" class="code-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" value="${escapeHtml(state.account.redeemCode)}">
       <div style="height:12px"></div>
-      <button class="btn btn-primary" id="accountConfirmEmail" type="button" ${state.account.status === 'saving' ? 'disabled' : ''}>Confirmar correo</button>` : `
-      <div style="height:14px"></div>
-      <button class="btn btn-primary" id="accountSave" type="button" ${state.account.status === 'saving' ? 'disabled' : ''}>${state.account.status === 'saving' ? 'Guardando…' : 'Guardar datos'}</button>`}
-    ${state.account.message ? `<p class="account-note ${noteClass}">${escapeHtml(state.account.message)}</p>` : ''}
+      <button class="btn btn-primary" id="redeemPlan" type="button" ${state.account.redeemStatus === 'saving' ? 'disabled' : ''}>${state.account.redeemStatus === 'saving' ? 'Canjeando…' : 'Canjear código'}</button>
+      <p class="account-note">Código de un uso. Si es el mismo plan y aún no ha vencido, se suman los meses.</p>
+      ${state.account.redeemStatus === 'error' && state.account.redeemMessage ? `<p class="account-note bad">${escapeHtml(state.account.redeemMessage)}</p>` : ''}
+    </div>
+    <div class="card-box" style="margin-top:14px">
+      <h2 class="section-title">Datos del perfil</h2>
+      <div class="name-row">
+        <div>
+          <label class="field-label" for="accountFirst">Nombre</label>
+          <input id="accountFirst" type="text" autocomplete="given-name" value="${escapeHtml(state.account.firstName)}">
+        </div>
+        <div>
+          <label class="field-label" for="accountLast">Apellidos</label>
+          <input id="accountLast" type="text" autocomplete="family-name" value="${escapeHtml(state.account.lastName)}">
+        </div>
+      </div>
+      ${nameErr ? `<p class="account-note bad">${escapeHtml(state.account.message)}</p>` : ''}
+      <label class="field-label" for="accountEmail">Correo</label>
+      <input id="accountEmail" type="email" autocomplete="email" value="${escapeHtml(state.account.email)}">
+      ${emailErr ? `<p class="account-note bad">${escapeHtml(state.account.message)}</p>` : ''}
+      ${state.account.pendingEmailId ? `<label class="field-label" for="accountCode">Código que te llegó al correo</label>
+        <input id="accountCode" type="text" inputmode="numeric" autocomplete="one-time-code" value="${escapeHtml(state.account.code)}">
+        <div class="account-actions" style="margin-top:14px"><button class="btn btn-primary" id="accountConfirmEmail" type="button" ${state.account.status === 'saving' ? 'disabled' : ''}>Confirmar correo</button></div>`
+        : `<div class="account-actions" style="margin-top:14px"><button class="btn btn-primary" id="accountSave" type="button" ${state.account.status === 'saving' ? 'disabled' : ''}>${state.account.status === 'saving' ? 'Guardando…' : 'Guardar datos'}</button></div>`}
+      ${state.account.status === 'saved' && state.account.message ? `<p class="account-note ok">${escapeHtml(state.account.message)}</p>` : ''}
+      ${state.account.status === 'code' && state.account.message ? `<p class="account-note ok">${escapeHtml(state.account.message)}</p>` : ''}
+    </div>
   </div>`;
-  document.getElementById('main').innerHTML = html;
 }
 
 async function saveAccountProfile(){
   const user = accountUser();
   if(!user || typeof user.update !== 'function'){
     state.account.status = 'error';
+    state.account.errorField = 'name';
     state.account.message = 'La sesión no está lista. Vuelve a entrar.';
     render();
     return;
@@ -2875,6 +3008,7 @@ async function saveAccountProfile(){
   }catch(err){
     console.error(err);
     state.account.status = 'error';
+    state.account.errorField = 'name';
     state.account.message = clerkErrorText(err);
     render();
     return;
@@ -2897,6 +3031,7 @@ async function saveAccountProfile(){
     }catch(err){
       console.error(err);
       state.account.status = 'error';
+      state.account.errorField = 'email';
       state.account.message = 'El nombre se guardó. El correo no: ' + clerkErrorText(err);
       render();
       return;
@@ -2904,6 +3039,7 @@ async function saveAccountProfile(){
   }
   if(typeof user.reload === 'function') await user.reload().catch(()=>{});
   state.account.touched = false;
+  state.account.errorField = '';
   state.account.status = 'saved';
   state.account.message = 'Datos guardados.';
   ensureAccountDraft();
@@ -3040,6 +3176,9 @@ function attachDynamicListeners(){
     redeemInput.addEventListener('input', () => {
       state.account.redeemCode = redeemInput.value;
     });
+    redeemInput.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter') redeemPlanCode();
+    });
   }
   const redeemPlan = document.getElementById('redeemPlan');
   if(redeemPlan) redeemPlan.addEventListener('click', () => redeemPlanCode());
@@ -3108,10 +3247,35 @@ function attachDynamicListeners(){
   if(confirmNoBtn){
     confirmNoBtn.addEventListener('click', ()=>{
       state.scan.pendingConfirm = null;
-      state.scan.liveMessage = '↩️ De acuerdo. Ajusta los recuadros e inténtalo de nuevo.';
+      state.scan.liveMessage = 'De acuerdo. Ajusta el recuadro e inténtalo de nuevo.';
       render();
     });
   }
+  const suggestLeadYes = document.getElementById('suggestLeadYes');
+  if(suggestLeadYes) suggestLeadYes.addEventListener('click', ()=>{
+    const card = state.scan.suggestions[0];
+    if(card) addScannedCard(card, 6000);
+  });
+  const suggestLeadNo = document.getElementById('suggestLeadNo');
+  if(suggestLeadNo) suggestLeadNo.addEventListener('click', ()=>{
+    state.scan.suggestions = state.scan.suggestions.slice(1);
+    render();
+  });
+  const nameLeadYes = document.getElementById('nameLeadYes');
+  if(nameLeadYes) nameLeadYes.addEventListener('click', ()=>{
+    const card = state.scan.nameResults[0];
+    if(card) addScannedCard(card, 6000);
+  });
+  const nameLeadNo = document.getElementById('nameLeadNo');
+  if(nameLeadNo) nameLeadNo.addEventListener('click', ()=>{
+    state.scan.nameResults = state.scan.nameResults.slice(1);
+    render();
+  });
+  const guideToggle = document.getElementById('guideToggle');
+  if(guideToggle) guideToggle.addEventListener('click', ()=>{
+    state.scan.guideOpen = !state.scan.guideOpen;
+    render();
+  });
 
   document.querySelectorAll('[data-name-idx]').forEach(el=>{
     el.addEventListener('click', ()=>{
@@ -3128,11 +3292,22 @@ function attachDynamicListeners(){
   const guessInput = document.getElementById('guessInput');
   if(guessInput){
     guessInput.addEventListener('input', (e)=>{ state.scan.photo.guess = e.target.value; });
+    guessInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') doScanSearch(); });
   }
   const scanSearchBtn = document.getElementById('scanSearchBtn');
   if(scanSearchBtn){
     scanSearchBtn.addEventListener('click', ()=> doScanSearch());
   }
+  const photoLeadYes = document.getElementById('photoLeadYes');
+  if(photoLeadYes) photoLeadYes.addEventListener('click', ()=>{
+    const card = state.scan.photo.results[0];
+    if(card) addCardToCollection(card);
+  });
+  const photoLeadNo = document.getElementById('photoLeadNo');
+  if(photoLeadNo) photoLeadNo.addEventListener('click', ()=>{
+    state.scan.photo.results = state.scan.photo.results.slice(1);
+    render();
+  });
   const scanResults = document.getElementById('scanResults');
   if(scanResults){
     scanResults.querySelectorAll('[data-add-idx]').forEach(el=>{
@@ -3144,13 +3319,20 @@ function attachDynamicListeners(){
   }
   const searchInput = document.getElementById('searchInput');
   if(searchInput){
-    searchInput.addEventListener('input', (e)=>{ state.search.query = e.target.value; });
-    searchInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') doSearch(); });
+    searchInput.addEventListener('input', (e)=>{
+      state.search.query = e.target.value;
+      clearTimeout(state.search.timer);
+      state.search.timer = setTimeout(()=> doSearch(), 280);
+    });
+    searchInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){
+        clearTimeout(state.search.timer);
+        doSearch();
+      }
+    });
   }
-  const searchBtn = document.getElementById('searchBtn');
-  if(searchBtn){
-    searchBtn.addEventListener('click', ()=> doSearch());
-  }
+  const searchRetry = document.getElementById('searchRetry');
+  if(searchRetry) searchRetry.addEventListener('click', ()=> doSearch());
   const searchResults = document.getElementById('searchResults');
   if(searchResults){
     searchResults.querySelectorAll('[data-add-idx]').forEach(el=>{
@@ -3163,6 +3345,17 @@ function attachDynamicListeners(){
   document.querySelectorAll('.chip[data-sort]').forEach(el=>{
     el.addEventListener('click', ()=>{ state.sortMode = el.dataset.sort; render(); });
   });
+  const collectionQuery = document.getElementById('collectionQuery');
+  if(collectionQuery){
+    collectionQuery.addEventListener('input', ()=>{
+      state.collectionQuery = collectionQuery.value;
+      renderKeeping('collectionQuery');
+    });
+  }
+  const retryCollection = document.getElementById('retryCollection');
+  if(retryCollection) retryCollection.addEventListener('click', ()=> loadCollection().then(()=> render()));
+  const goScan = document.getElementById('goScan');
+  if(goScan) goScan.addEventListener('click', ()=>{ state.tab = 'scan'; render(); });
   document.querySelectorAll('[data-qty]').forEach(el=>{
     el.addEventListener('click', ()=> changeQty(el.dataset.id, parseInt(el.dataset.qty,10)));
   });
@@ -3179,6 +3372,13 @@ function attachDynamicListeners(){
   const retryLoadSets = document.getElementById('retryLoadSets');
   if(retryLoadSets){
     retryLoadSets.addEventListener('click', ()=> loadSets());
+  }
+  const setQuery = document.getElementById('setQuery');
+  if(setQuery){
+    setQuery.addEventListener('input', ()=>{
+      state.expansion.query = setQuery.value;
+      renderKeeping('setQuery');
+    });
   }
   const refreshSets = document.getElementById('refreshSets');
   if(refreshSets){
@@ -3277,22 +3477,29 @@ async function doScanSearch(){
   render();
 }
 
+let searchToken = 0;
 async function doSearch(){
-  const q = state.search.query;
-  if(!q.trim()) return;
-  state.search.status = 'searching';
-  state.search.results = [];
-  render();
-  try{
-    state.search.results = await searchCards(q);
-  }catch(err){
-    console.error(err);
-    state.search.status = 'error';
-    render();
+  const q = state.search.query.trim();
+  const token = ++searchToken;
+  if(q.length < 2){
+    state.search.results = [];
+    state.search.status = 'idle';
+    renderKeeping('searchInput');
     return;
   }
-  state.search.status = 'done';
-  render();
+  state.search.status = 'searching';
+  renderKeeping('searchInput');
+  try{
+    const results = await searchCards(q);
+    if(token !== searchToken) return;
+    state.search.results = results;
+    state.search.status = 'done';
+  }catch(err){
+    console.error(err);
+    if(token !== searchToken) return;
+    state.search.status = 'error';
+  }
+  renderKeeping('searchInput');
 }
 
 async function refreshSetsCatalog(){

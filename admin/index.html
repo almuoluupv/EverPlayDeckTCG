@@ -90,7 +90,7 @@
   .plan h2{font-family:'Space Grotesk', sans-serif; font-size:18px; margin:0 0 4px}
   .plan p{margin:0 0 12px; color:var(--muted); font-size:13.5px; line-height:1.4}
   .actions{display:flex; justify-content:flex-end; margin-top:14px}
-  .log{padding:14px 0; border-top:1px solid var(--line)}
+  .log{padding:18px 0; border-top:1px solid var(--line)}
   .log:first-of-type{border-top:0; padding-top:0}
   .log p{margin:6px 0 0; font-size:15px; line-height:1.45}
   details{margin-top:8px}
@@ -99,10 +99,17 @@
     white-space:pre-wrap; word-break:break-word; font-size:12px; color:var(--muted);
     background:var(--surface-2); border-radius:10px; padding:10px; margin:8px 0 0;
   }
-  .plan-edit{display:grid; gap:8px}
-  .code-row{padding:14px 0; border-top:1px solid var(--line)}
+  .plan-edit{display:grid; gap:8px; grid-template-columns:1fr 88px}
+  .assign-line{margin:0}
+  .code-row{padding:14px 0; border-top:1px solid var(--line); display:grid; gap:8px}
   .code-row:first-of-type{border-top:0; padding-top:0}
-  .code-head{display:flex; justify-content:space-between; gap:10px; align-items:center}
+  .code-table-head{display:none; color:var(--muted); font-size:13px; font-weight:600; padding-bottom:8px}
+  .day-title{font-family:'Space Grotesk', sans-serif; font-size:16px; margin:22px 0 4px}
+  .day-title:first-child{margin-top:0}
+  .skip{position:absolute; left:12px; top:-48px; background:var(--accent); color:var(--accent-ink); padding:8px 12px; border-radius:8px; z-index:5; font-weight:700}
+  .skip:focus{top:12px}
+  :focus{outline:none}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
   .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing:0.06em; font-size:16px}
   input.code-input{letter-spacing:0.08em; text-transform:uppercase; font-weight:600}
   .fresh{display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 0}
@@ -118,9 +125,10 @@
   @media (min-width: 800px){
     .user{grid-template-columns:minmax(0,1.3fr) 150px minmax(220px, 280px) auto; align-items:end}
     .plans{grid-template-columns:repeat(3, 1fr)}
-    .plan-edit{grid-template-columns:1fr 88px}
     .actions{grid-column:1 / -1}
-    .code-row{display:grid; grid-template-columns:minmax(180px, 240px) 1fr 1fr; gap:12px; align-items:center}
+    .assign-line{grid-column:1 / -1}
+    .code-table-head{display:grid; grid-template-columns:150px 1fr 110px 1.4fr auto; gap:12px}
+    .code-row{grid-template-columns:150px 1fr 110px 1.4fr auto; gap:12px; align-items:center}
   }
   @media (max-width: 799px){
     h1{font-size:24px}
@@ -130,6 +138,7 @@
 </style>
 </head>
 <body>
+<a class="skip" href="#desk">Saltar al contenido</a>
 <div class="wrap">
   <header class="top">
     <div>
@@ -284,6 +293,17 @@ function planName(planId){
   const plan = (overview.plans || []).find((item) => item.id === planId);
   return plan ? plan.name : planId;
 }
+function assignLine(planId, months){
+  if(planId === 'gratis') return 'Vuelve a Gratis y quita la fecha.';
+  const count = Number(months);
+  const n = Number.isInteger(count) && count > 0 ? count : 1;
+  return `Pasa a ${planName(planId)} durante ${n} ${n === 1 ? 'mes' : 'meses'}, desde hoy.`;
+}
+function dayTitle(value){
+  const date = new Date(value);
+  if(Number.isNaN(date.getTime())) return 'Sin fecha';
+  return new Intl.DateTimeFormat('es', { dateStyle: 'full' }).format(date);
+}
 function planMax(planId){
   const plan = (overview.plans || []).find((item) => item.id === planId);
   return plan ? plan.maxCards : null;
@@ -331,6 +351,7 @@ function renderDesk(){
           <input data-months="${escapeHtml(user.userId)}" type="number" min="1" max="36" inputmode="numeric" value="1" aria-label="Meses para ${escapeHtml(label)}">
         </label>
       </div>
+      <p class="meta assign-line" data-line="${escapeHtml(user.userId)}">${escapeHtml(assignLine(user.planId, 1))}</p>
       <button class="primary" type="button" data-save-user="${escapeHtml(user.userId)}" ${busy === user.userId ? 'disabled' : ''}>${busy === user.userId ? 'Guardando…' : 'Asignar plan'}</button>
     </article>`;
   }).join('') : `<p class="empty">${userQuery ? 'Nadie coincide con esa búsqueda.' : 'Cuando alguien entre en el álbum, aparecerá aquí.'}</p>`;
@@ -368,10 +389,10 @@ function renderDesk(){
         <input id="codeCount" type="number" min="1" max="20" inputmode="numeric" value="${codeCount}">
       </label>
     </div>
-    <div class="actions"><button class="primary" type="submit" ${busy === 'codes' ? 'disabled' : ''}>${busy === 'codes' ? 'Generando…' : 'Generar códigos'}</button></div>
+    <div class="actions"><button class="${freshCodes.length ? 'ghost' : 'primary'}" type="submit" ${busy === 'codes' ? 'disabled' : ''}>${busy === 'codes' ? 'Generando…' : 'Generar códigos'}</button></div>
     ${freshCodes.length ? `<p class="empty" style="margin-top:12px">Códigos nuevos. Dáselos ahora; cada uno vale una sola vez.</p>
       <div class="fresh">${freshCodes.map((row) => `<code>${escapeHtml(row.code)}</code>`).join('')}</div>
-      <div class="actions"><button class="ghost" type="button" id="copyFresh">Copiar todos</button></div>` : ''}
+      <div class="actions"><button class="primary" type="button" id="copyFresh">Copiar todos</button></div>` : ''}
   </form>
   <div class="card">
     <div class="filters">
@@ -379,15 +400,14 @@ function renderDesk(){
       <button type="button" class="${codeFilter === 'used' ? 'primary' : 'ghost'}" data-code-filter="used">Usados</button>
       <button type="button" class="${codeFilter === 'all' ? 'primary' : 'ghost'}" data-code-filter="all">Todos</button>
     </div>
-    ${shownCodes.length ? shownCodes.map((row) => `<article class="code-row">
-      <div class="code-head">
-        <strong class="mono">${escapeHtml(row.code)}</strong>
-        <button class="ghost" type="button" data-copy="${escapeHtml(row.code)}">Copiar</button>
-      </div>
-      <div class="meta">${escapeHtml(planName(row.planId))} · ${escapeHtml(monthLabel(row.months))}</div>
+    ${shownCodes.length ? `<div class="code-table-head"><span>Código</span><span>Plan</span><span>Duración</span><span>Estado</span><span></span></div>` + shownCodes.map((row) => `<article class="code-row">
+      <strong class="mono">${escapeHtml(row.code)}</strong>
+      <div>${escapeHtml(planName(row.planId))}</div>
+      <div>${escapeHtml(monthLabel(row.months))}</div>
       <div class="meta">${row.redeemedAt
-        ? 'Usado el ' + escapeHtml(formatDay(row.redeemedAt)) + (row.redeemedBy ? ' · ' + escapeHtml(row.redeemedBy) : '')
-        : 'Sin usar · creado el ' + escapeHtml(formatDay(row.createdAt))}</div>
+        ? 'Usado' + (row.redeemedBy ? ' · ' + escapeHtml(row.redeemedBy) : '')
+        : 'Sin usar'}</div>
+      <button class="ghost" type="button" data-copy="${escapeHtml(row.code)}">Copiar</button>
     </article>`).join('') : `<p class="empty">${emptyCodes}</p>`}
   </div>`;
 
@@ -404,13 +424,18 @@ function renderDesk(){
   </form>`;
 
   const logs = overview.logs || [];
-  document.getElementById('panelLogs').innerHTML = `<div class="card">
-    ${logs.length ? logs.map((row) => `<article class="log">
-      <div class="meta">${escapeHtml(formatWhen(row.createdAt))} · ${escapeHtml(row.email || 'Sin sesión')} · ${escapeHtml(row.source || 'cliente')}</div>
+  const logGroups = new Map();
+  logs.forEach((row) => {
+    const title = dayTitle(row.createdAt);
+    if(!logGroups.has(title)) logGroups.set(title, []);
+    logGroups.get(title).push(row);
+  });
+  const logHtml = logs.length ? [...logGroups.entries()].map(([title, rows]) => `<h3 class="day-title">${escapeHtml(title)}</h3>` + rows.map((row) => `<article class="log">
+      <div class="meta">${escapeHtml(formatWhen(row.createdAt))} · ${escapeHtml(row.email || 'Sin sesión')}</div>
       <p>${escapeHtml(row.message)}</p>
       ${row.stack ? `<details><summary>Detalle técnico</summary><pre>${escapeHtml(row.stack)}</pre></details>` : ''}
-    </article>`).join('') : '<p class="empty">No hay avisos. Si el álbum falla en un navegador, el texto del fallo llega aquí, sin fotos ni claves.</p>'}
-  </div>`;
+    </article>`).join('')).join('') : '<p class="empty">No hay avisos. Si el álbum falla en un navegador, el texto del fallo llega aquí, sin fotos ni claves.</p>';
+  document.getElementById('panelLogs').innerHTML = `<div class="card">${logHtml}</div>`;
 
   const search = document.getElementById('userSearch');
   if(search){
@@ -437,6 +462,16 @@ function renderDesk(){
   if(copyFresh) copyFresh.addEventListener('click', () => copyText(freshCodes.map((row) => row.code).join('\n')));
   document.querySelectorAll('[data-save-user]').forEach((button) => {
     button.addEventListener('click', () => saveUser(button.dataset.saveUser));
+  });
+  document.querySelectorAll('select[data-user]').forEach((select) => {
+    const sync = () => {
+      const monthsInput = document.querySelector(`input[data-months="${CSS.escape(select.dataset.user)}"]`);
+      const line = document.querySelector(`[data-line="${CSS.escape(select.dataset.user)}"]`);
+      if(line) line.textContent = assignLine(select.value, monthsInput ? monthsInput.value : 1);
+    };
+    select.addEventListener('change', sync);
+    const monthsInput = document.querySelector(`input[data-months="${CSS.escape(select.dataset.user)}"]`);
+    if(monthsInput) monthsInput.addEventListener('input', sync);
   });
   selectPanel(panel);
 }
@@ -501,7 +536,6 @@ async function saveCodes(event){
   }
   freshCodes = res.json.created || [];
   overview.codes = res.json.codes || overview.codes;
-  codeFilter = 'unused';
   setNotice(freshCodes.length === 1 ? 'Código generado.' : freshCodes.length + ' códigos generados.', 'ok');
   renderDesk();
 }
