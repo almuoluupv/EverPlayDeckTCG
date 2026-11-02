@@ -1,0 +1,22 @@
+{
+  "name": "album-pokemon",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "start": "node api/server.js",
+    "dev:web": "node scripts/static-server.js",
+    "dev:api": "node --env-file=.env api/server.js",
+    "test": "node --test api/*.test.js",
+    "check:scanner": "node scripts/check-scanner.mjs"
+  },
+  "dependencies": {
+    "@clerk/backend": "^2.29.0",
+    "mongodb": "^6.20.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.15.0"
+  }
+}

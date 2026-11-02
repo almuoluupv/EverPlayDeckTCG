@@ -1,0 +1,2945 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Mi Álbum Pokémon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.5/tesseract.min.js"></script>
+<style>
+  :root{
+    --ink:#14171F;
+    --surface:#1B1F2B;
+    --surface-2:#242A3A;
+    --line: rgba(241,239,233,0.08);
+    --accent:#F5C518;
+    --accent-ink:#3A2E00;
+    --teal:#2FB9C4;
+    --text:#F1EFE9;
+    --muted:#8B90A0;
+    --danger:#E4572E;
+    --radius: 14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: var(--ink);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height:100vh;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #app{
+    max-width: 520px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display:flex;
+    flex-direction:column;
+    background:
+      radial-gradient(120% 60% at 50% -10%, rgba(245,197,24,0.10), transparent 60%),
+      var(--ink);
+  }
+
+  header.topbar{
+    padding: 22px 20px 16px;
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    border-bottom: 1px solid var(--line);
+  }
+  header.topbar h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight:700;
+    margin:0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  header.topbar .sub{
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .totals{
+    text-align:right;
+    font-family:'Space Grotesk', sans-serif;
+  }
+  .totals .val{ font-size:18px; font-weight:700; line-height:1.25;}
+  .totals .val.eur{ color: var(--accent); }
+  .totals .val.usd{ color: var(--teal); }
+  .auth-slot{ margin-top: 8px; min-height: 22px; }
+  .auth-note{ color: var(--muted); font-size: 11.5px; line-height: 1.3; }
+  .auth-btn{
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid rgba(245,197,24,0.45);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font: 600 12px 'Inter', sans-serif;
+    cursor: pointer;
+  }
+
+  main{
+    flex:1;
+    padding: 18px 16px 100px;
+    overflow-y:auto;
+  }
+
+  nav.tabs{
+    position: sticky;
+    bottom: 0;
+    display:flex;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    max-width:520px;
+    margin: 0 auto;
+    width:100%;
+  }
+  nav.tabs button{
+    flex:1;
+    background:none;
+    border:none;
+    color: var(--muted);
+    font-family:'Inter', sans-serif;
+    font-size: 12.5px;
+    font-weight:600;
+    padding: 12px 4px 14px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:5px;
+    cursor:pointer;
+  }
+  nav.tabs button svg{ width:22px; height:22px; }
+  nav.tabs button.active{ color: var(--accent); }
+  nav.tabs button.active svg{ stroke: var(--accent); }
+
+  .card-box{
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    border:none;
+    border-radius: 10px;
+    padding: 13px 18px;
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:14.5px;
+    cursor:pointer;
+  }
+  .btn-primary{ background: var(--accent); color: var(--accent-ink); width:100%; }
+  .btn-primary:active{ transform: translateY(1px); }
+  .btn-ghost{ background: var(--surface-2); color: var(--text); border:1px solid var(--line); }
+
+  input[type="text"]{
+    width:100%;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 15px;
+    font-family:'Inter', sans-serif;
+  }
+  input[type="text"]::placeholder{ color: var(--muted); }
+  input[type="file"]{ display:none; }
+
+  h2.section-title{
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 15px;
+    font-weight:600;
+    margin: 22px 0 10px;
+    color: var(--text);
+  }
+  h2.section-title:first-child{ margin-top:0; }
+
+  .hint{ color: var(--muted); font-size: 13px; line-height:1.5; margin-top:10px; }
+
+  .preview-wrap{
+    display:flex;
+    gap:14px;
+    align-items:center;
+    margin-bottom: 14px;
+  }
+  .preview-wrap img{
+    width: 78px; height:109px; object-fit:cover; border-radius:8px; border:1px solid var(--line);
+  }
+  .status-line{ font-size: 13.5px; color: var(--muted); display:flex; align-items:center; gap:8px; }
+  .spinner{
+    width:14px; height:14px; border-radius:50%;
+    border: 2px solid var(--line); border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  .result-grid{
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .result-card{
+    background: var(--surface-2);
+    border:1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px;
+    cursor:pointer;
+    text-align:center;
+  }
+  .result-card:active{ border-color: var(--accent); }
+  .result-card img{ width:100%; border-radius:6px; display:block; margin-bottom:6px; }
+  .result-card .rname{ font-size:11.5px; font-weight:600; line-height:1.25; }
+  .result-card .rset{ font-size:10.5px; color: var(--muted); margin-top:2px; }
+
+  .empty{
+    text-align:center;
+    padding: 50px 20px;
+    color: var(--muted);
+  }
+  .empty svg{ width:44px; height:44px; stroke: var(--muted); margin-bottom:14px; }
+  .empty p{ font-size:14px; line-height:1.5; margin:0; }
+
+  .sort-row{
+    display:flex; gap:8px; margin-bottom: 16px;
+  }
+  .chip{
+    flex:1;
+    text-align:center;
+    padding: 9px 6px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    border:1px solid var(--line);
+    font-size: 12.5px;
+    font-weight:600;
+    color: var(--muted);
+    cursor:pointer;
+  }
+  .chip.active{ background: rgba(245,197,24,0.12); border-color: var(--accent); color: var(--accent); }
+
+  .group-header{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin: 20px 0 8px;
+  }
+  .group-header:first-child{ margin-top:0; }
+  .group-header .gname{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:14.5px; }
+  .group-header .gcount{ color: var(--muted); font-size:12px; }
+
+  .row{
+    display:flex; gap:12px; align-items:center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .row:last-child{ border-bottom:none; }
+  .row img{ width:46px; height:64px; object-fit:cover; border-radius:5px; flex-shrink:0; }
+  .row .info{ flex:1; min-width:0; }
+  .row .rname{ font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .rmeta{ font-size:11.5px; color: var(--muted); margin-top:2px; }
+  .row .prices{ font-size:12px; margin-top:4px; display:flex; gap:10px; }
+  .row .prices .p-eur{ color: var(--accent); font-weight:600; }
+  .row .prices .p-usd{ color: var(--teal); font-weight:600; }
+  .row .qty{
+    display:flex; align-items:center; gap:6px; flex-shrink:0;
+  }
+  .qty button{
+    width:24px; height:24px; border-radius:6px; border:1px solid var(--line);
+    background: var(--surface-2); color: var(--text); font-size:14px; cursor:pointer; line-height:1;
+  }
+  .qty .n{ font-size:13px; font-weight:600; min-width:16px; text-align:center; }
+  .del{
+    background:none; border:none; color: var(--muted); font-size: 16px; cursor:pointer; padding: 4px 0 4px 8px;
+  }
+
+  .toast{
+    position: fixed;
+    bottom: 78px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface-2);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight:500;
+    z-index: 50;
+    opacity: 0;
+    pointer-events:none;
+    transition: opacity 0.25s ease;
+  }
+  .toast.show{ opacity: 1; }
+
+  .mode-row{ display:flex; gap:8px; margin-bottom: 14px; }
+
+  .video-box{ padding: 14px; }
+  .video-wrap{
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #000;
+  }
+  .video-wrap video{
+    width:100%; height:100%; object-fit:cover; display:block;
+    transform:scale(var(--camera-display-zoom, 1));
+    transform-origin:center center;
+    transition:transform .12s ease-out;
+  }
+  .camera-adjust{
+    margin-top:12px; padding:12px; border:1px solid var(--border);
+    border-radius:12px; background:var(--surface-2);
+  }
+  .zoom-row{display:flex;align-items:center;gap:10px;}
+  .zoom-btn{width:42px;height:42px;padding:0;font-size:22px;border-radius:10px;}
+  .zoom-range{flex:1;accent-color:var(--accent);min-width:0;}
+  .zoom-value{min-width:54px;text-align:center;font-weight:700;font-size:14px;}
+  .camera-adjust small{display:block;color:var(--muted);line-height:1.4;margin-top:7px;}
+  .adjust-actions{display:flex;gap:8px;margin-top:10px;}
+  .adjust-actions .btn{flex:1;}
+  /* ── Encuadre azul: carta completa ── */
+  .roi-card{position:absolute;border:2.5px solid #4a9eff;border-radius:10px;background:rgba(74,158,255,.04);box-shadow:0 0 0 2px rgba(0,0,0,.3);cursor:move;touch-action:none;z-index:3;pointer-events:auto;}
+  /* Badge en esquina superior-izquierda, pequeño, no tapa nada importante */
+  .roi-card::before{content:'CARTA';position:absolute;top:4px;left:4px;background:rgba(0,0,0,.72);color:#4a9eff;padding:2px 6px;border-radius:4px;font-size:8px;font-weight:800;letter-spacing:.06em;pointer-events:none;white-space:nowrap;}
+  /* ── Encuadre amarillo: número ── */
+  .roi-num{position:absolute;border:2.5px solid var(--accent);border-radius:7px;background:rgba(245,197,24,.12);box-shadow:0 0 0 2px rgba(0,0,0,.3);cursor:move;touch-action:none;z-index:4;pointer-events:auto;min-width:48px;min-height:24px;}
+  /* Badge DEBAJO del recuadro amarillo para no tapar el número */
+  .roi-num::before{content:'NÚMERO';position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:var(--accent);padding:2px 7px;border-radius:5px;font-size:9px;font-weight:800;letter-spacing:.08em;pointer-events:none;white-space:nowrap;}
+  /* Esquina redimensionable del recuadro amarillo */
+  .roi-num-resize{position:absolute;bottom:0;right:0;width:18px;height:18px;cursor:nwse-resize;touch-action:none;background:var(--accent);border-radius:4px 0 4px 0;opacity:.85;display:flex;align-items:center;justify-content:center;}
+  .roi-num-resize::after{content:'◢';font-size:9px;color:#000;line-height:1;}
+  /* Leyenda de instrucciones */
+  .roi-legend{font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  .roi-legend-card{color:#4a9eff;}.roi-legend-num{color:var(--accent);}
+  /* debug text — FUERA del video, debajo del recuadro */
+  .ocr-debug{font-size:11px;color:var(--muted);padding:5px 4px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .capture-actions{display:flex;gap:8px;margin-top:8px}.capture-actions .btn{flex:1}
+  /* Status — FUERA del video-wrap, no superpuesto */
+  .live-status{
+    display:flex; align-items:center; gap:7px;
+    font-size:12px; font-weight:600; color:var(--text);
+    padding:6px 4px; margin-top:4px;
+  }
+  .live-status .dot{
+    flex-shrink:0;width:7px; height:7px; border-radius:50%; background: var(--accent);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{ opacity:1;} 50%{ opacity:0.3;} }
+  .suggest-banner{
+    position:absolute; left:0; right:0; bottom:0;
+    background: rgba(20,23,31,0.92);
+    padding: 10px 10px 12px;
+  }
+  .suggest-label{ font-size:11.5px; color: var(--muted); margin-bottom:6px; }
+  .suggest-list{ display:flex; gap:8px; overflow-x:auto; }
+  .suggest-item{
+    flex-shrink:0; width:64px; text-align:center; cursor:pointer;
+  }
+  .suggest-item img{ width:100%; border-radius:6px; border:1px solid var(--line); }
+  .suggest-item span{ display:block; font-size:10px; margin-top:3px; line-height:1.2; color: var(--text); }
+
+  /* ── Confirmación de carta única ── */
+  .confirm-banner{
+    display:flex; align-items:center; gap:12px;
+    background:var(--card); border:2px solid var(--accent);
+    border-radius:12px; padding:12px; margin:10px 0;
+  }
+  .confirm-banner img{ width:72px; border-radius:8px; flex-shrink:0; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+  .confirm-info{ flex:1; min-width:0; }
+  .confirm-info strong{ display:block; font-size:15px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .confirm-info span{ font-size:11px; color:var(--muted); }
+  .confirm-info .confirm-price{ font-size:12px; color:var(--accent); font-weight:600; margin-top:3px; }
+  .confirm-actions{ display:flex; flex-direction:column; gap:6px; }
+  .confirm-actions .btn{ padding:8px 14px; font-size:13px; white-space:nowrap; }
+  .name-results-header{ font-size:13px; font-weight:600; color:var(--text); margin:12px 0 8px; }
+  .name-results-header span{ font-size:11px; font-weight:400; color:var(--muted); margin-left:6px; }
+  .name-results-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px; }
+  .name-result-item{ cursor:pointer; background:var(--card); border:1.5px solid var(--line); border-radius:10px; padding:7px; text-align:center; transition:border-color .15s; }
+  .name-result-item:active{ border-color:var(--accent); }
+  .name-result-item img{ width:100%; border-radius:6px; display:block; margin-bottom:5px; }
+  .name-result-item .nri-name{ font-size:10px; font-weight:700; color:var(--text); line-height:1.2; }
+  .name-result-item .nri-set{ font-size:9px; color:var(--muted); margin-top:2px; line-height:1.3; }
+
+    display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer;
+  }
+  .back-row svg{ width:18px; height:18px; stroke: var(--muted); }
+  .back-row span{ font-size:13.5px; font-weight:600; color: var(--muted); }
+
+  .set-list{ display:flex; flex-direction:column; }
+  .set-row{
+    display:flex; align-items:center; gap:12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+    cursor:pointer;
+  }
+  .set-row:last-child{ border-bottom:none; }
+  .set-logo{
+    width:52px; height:36px; object-fit:contain; flex-shrink:0;
+  }
+  .set-info{ flex:1; min-width:0; }
+  .set-name{ font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .set-meta{ font-size:11px; color: var(--muted); margin-top:2px; }
+  .set-progress-bar{
+    height:4px; border-radius:3px; background: var(--surface-2); margin-top:6px; overflow:hidden;
+  }
+  .set-progress-bar .fill{ height:100%; background: var(--accent); }
+  .set-count{
+    font-family:'Space Grotesk', sans-serif; font-size:12.5px; font-weight:600; color: var(--muted); flex-shrink:0;
+  }
+
+  .set-header{
+    display:flex; align-items:center; gap:12px; margin-bottom:12px;
+  }
+  .set-header img{ width:52px; height:36px; object-fit:contain; }
+  .set-header .shname{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:16px; }
+  .set-header .shcount{ font-size:12.5px; color: var(--muted); margin-top:2px; }
+
+  .exp-filter-row{ display:flex; gap:8px; margin-bottom:14px; }
+
+  .checklist-grid{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .check-card{
+    position:relative;
+    border-radius:8px;
+    overflow:hidden;
+    background: var(--surface-2);
+    border:1px solid var(--line);
+    cursor:pointer;
+    aspect-ratio: 63 / 88;
+  }
+  .check-card img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .check-card.unowned img{ filter: grayscale(1); opacity:0.4; }
+  .check-card.owned{ box-shadow: 0 0 0 2px var(--accent) inset; }
+  .check-card .cc-num{
+    position:absolute; bottom:0; left:0; right:0;
+    font-size:9.5px; text-align:center; font-weight:600;
+    background: rgba(0,0,0,0.6); color:#fff; padding:2px 0;
+  }
+  .check-card .cc-qty{
+    position:absolute; top:3px; right:3px;
+    background: var(--accent); color: var(--accent-ink);
+    font-size:9px; font-weight:700; border-radius:6px; padding:1px 4px;
+  }
+  .check-card .cc-minus{
+    position:absolute; top:3px; left:3px;
+    width:18px; height:18px; border-radius:50%;
+    background: rgba(0,0,0,0.65); color:#fff; border:none;
+    font-size:13px; line-height:1; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; padding:0;
+  }
+
+  ::-webkit-scrollbar{ width:0; }
+
+.ocr-debug{margin:8px 10px 0;padding:7px 9px;border-radius:10px;background:rgba(0,0,0,.55);font-size:11px;line-height:1.35;word-break:break-word;color:#fff}.ocr-debug strong{font-weight:600}.ocr-error{margin:8px 10px 0;padding:8px 10px;border-radius:10px;background:rgba(170,35,35,.9);font-size:12px;color:#fff}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <div>
+      <h1>Mi Álbum Pokémon</h1>
+      <div class="sub" id="collectionCount">0 cartas</div>
+      <div id="authSlot" class="auth-slot"></div>
+    </div>
+    <div class="totals">
+      <div class="val eur" id="totalEUR">€0.00</div>
+      <div class="val usd" id="totalUSD">$0.00</div>
+    </div>
+  </header>
+
+  <main id="main"></main>
+
+  <nav class="tabs">
+    <button data-tab="scan" class="active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8V6a2 2 0 0 1 2-2h2M4 16v2a2 2 0 0 0 2 2h2M20 8V6a2 2 0 0 0-2-2h-2M20 16v2a2 2 0 0 1-2 2h-2"/><circle cx="12" cy="12" r="3.2"/></svg>
+      Escanear
+    </button>
+    <button data-tab="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-3.8-3.8"/></svg>
+      Buscar
+    </button>
+    <button data-tab="collection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9.5h16M9.5 9.5V20"/></svg>
+      Colección
+    </button>
+    <button data-tab="expansion">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="4.5" width="8" height="8" rx="1.5"/><rect x="12.5" y="4.5" width="8" height="8" rx="1.5"/><rect x="3.5" y="13.5" width="8" height="8" rx="1.5"/><rect x="12.5" y="13.5" width="8" height="8" rx="1.5"/></svg>
+      Expansiones
+    </button>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="./config.js"></script>
+<script>
+/* ---------- estado ---------- */
+const state = {
+  tab: 'scan',
+  collection: [],
+  globalIndex: null, // catálogo completo de cartas cargado desde ./data/index.json
+  scan: {
+    mode: 'live', // 'live' | 'photo'
+    liveActive: false,
+    liveStatus: 'idle', // idle | starting | scanning | error
+    suggestions: [],
+    suggestionToken: 0,
+    pendingConfirm: null,   // carta única de alta confianza esperando confirmación
+    nameResults: [],         // resultados de búsqueda por nombre cuando número falla
+    recent: [],
+    cooldownGuess: '',
+    cooldownUntil: 0,
+    liveMessage: 'Preparando reconocimiento…',
+    liveText: '',
+    liveError: '',
+    livePhase: 'idle', // idle | adjust | scanning
+    zoom: 1,
+    zoomMin: 1,
+    zoomMax: 3,
+    zoomStep: 0.1,
+    hardwareZoom: false,
+    roi: { x: 0.08, y: 0.08, w: 0.84, h: 0.82 },
+    roiNum: { x: 0.55, y: 0.82, w: 0.32, h: 0.10 },
+    roiDragging: false,
+    roiNumDragging: false,
+    photo: { image:null, status:'idle', guess:'', results:[] }
+  },
+  search: { query:'', results:[], status:'idle' },
+  sortMode: 'expansion', // 'expansion' | 'price-desc' | 'price-asc'
+  expansion: {
+    view: 'sets', // 'sets' | 'cards'
+    sets: null,
+    setsStatus: 'idle', // idle | loading | error
+    setsError: '',
+    selectedSet: null,
+    cards: [],
+    cardsStatus: 'idle', // idle | loading | error
+    cardsError: '',
+    cardsCache: {},
+    filter: 'all' // 'all' | 'owned' | 'missing'
+  }
+};
+
+/* El catálogo sale de ./data/. El álbum usa la API solo con sesión y config.js
+   relleno. Si falta la clave, la URL de la API o el login, se queda en localStorage. */
+
+const STORAGE_KEY = 'pokemon_album_collection_v1';
+let authListenerReady = false;
+
+function albumConfig(){
+  const cfg = window.ALBUM_CONFIG || {};
+  return {
+    clerkPublishableKey: String(cfg.clerkPublishableKey || '').trim(),
+    apiBase: String(cfg.apiBase || '').trim().replace(/\/$/, ''),
+  };
+}
+
+function remoteAlbumEnabled(){
+  const cfg = albumConfig();
+  return Boolean(cfg.apiBase && cfg.clerkPublishableKey && window.Clerk && window.Clerk.user && window.Clerk.session);
+}
+
+function readLocalCollection(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  }catch(e){
+    console.error('No se pudo leer la colección guardada', e);
+    return [];
+  }
+}
+
+function writeLocalCollection(collection){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(collection));
+}
+
+async function sessionToken(){
+  const session = window.Clerk && window.Clerk.session;
+  if(!session || typeof session.getToken !== 'function') return '';
+  return (await session.getToken()) || '';
+}
+
+async function fetchRemoteCards(){
+  const token = await sessionToken();
+  if(!token) throw new Error('sin sesión');
+  const res = await fetch(albumConfig().apiBase + '/api/collection', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if(!data || !Array.isArray(data.cards)) throw new Error('respuesta inválida');
+  return data.cards;
+}
+
+async function putRemoteCards(collection){
+  const token = await sessionToken();
+  if(!token) throw new Error('sin sesión');
+  const cards = collection
+    .filter(card => card && card.id && card.qty > 0)
+    .map(card => ({ cardId: String(card.id), qty: card.qty }));
+  const res = await fetch(albumConfig().apiBase + '/api/collection', {
+    method: 'PUT',
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ cards }),
+  });
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+}
+
+async function hydrateRemoteCards(cards){
+  const index = await ensureGlobalIndex();
+  const byId = new Map(index.map(card => [card.id, card]));
+  return cards.map(row => {
+    const known = byId.get(row.cardId);
+    const qty = row.qty || 1;
+    if(known) return { ...known, qty };
+    return {
+      id: row.cardId,
+      name: row.cardId,
+      number: '',
+      setId: '',
+      setName: 'Fuera del catálogo',
+      setTotal: 0,
+      image: '',
+      cardmarketEUR: null,
+      tcgplayerUSD: null,
+      qty,
+    };
+  });
+}
+
+async function loadCollection(){
+  const local = readLocalCollection();
+  if(!remoteAlbumEnabled()){
+    state.collection = local;
+    return;
+  }
+  try{
+    const remote = await fetchRemoteCards();
+    const userId = window.Clerk.user.id;
+    const migrateKey = 'pokemon_album_uploaded_v1:' + userId;
+    if(remote.length === 0 && local.length > 0 && !localStorage.getItem(migrateKey)){
+      state.collection = local;
+      await putRemoteCards(local);
+      localStorage.setItem(migrateKey, '1');
+      showToast('Colección de este dispositivo guardada en tu cuenta');
+      return;
+    }
+    state.collection = await hydrateRemoteCards(remote);
+    writeLocalCollection(state.collection);
+  }catch(e){
+    console.error('No se pudo leer el álbum de la cuenta', e);
+    state.collection = local;
+    showToast('No se pudo leer la cuenta. Sigo con el álbum de este dispositivo.');
+  }
+}
+
+async function saveCollection(){
+  try{
+    writeLocalCollection(state.collection);
+  }catch(e){
+    console.error('No se pudo guardar la colección', e);
+    showToast('No se pudo guardar (¿modo incógnito o almacenamiento lleno?)');
+    return;
+  }
+  if(!remoteAlbumEnabled()) return;
+  try{
+    await putRemoteCards(state.collection);
+  }catch(e){
+    console.error('No se pudo guardar en la cuenta', e);
+    showToast('No se pudo guardar en la cuenta. Quedó en este dispositivo.');
+  }
+}
+
+function setAuthNote(text){
+  const slot = document.getElementById('authSlot');
+  if(slot) slot.innerHTML = `<span class="auth-note">${escapeHtml(text)}</span>`;
+}
+
+function clerkHost(publishableKey){
+  const encoded = publishableKey.split('_')[2] || '';
+  let decoded = '';
+  try{ decoded = atob(encoded); }catch{ decoded = ''; }
+  const host = decoded.replace(/\$+$/, '');
+  if(!host.includes('.')) throw new Error('clave publicable inválida');
+  return host;
+}
+
+function loadScript(src, attrs){
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    script.crossOrigin = 'anonymous';
+    Object.entries(attrs || {}).forEach(([key, value]) => script.setAttribute(key, value));
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('No se pudo cargar Clerk'));
+    document.head.appendChild(script);
+  });
+}
+
+function paintAuthSlot(){
+  const slot = document.getElementById('authSlot');
+  const clerk = window.Clerk;
+  if(!slot || !clerk || !clerk.loaded) return;
+  if(clerk.user){
+    slot.innerHTML = '<div id="userButton"></div>';
+    const node = document.getElementById('userButton');
+    if(typeof clerk.mountUserButton === 'function') clerk.mountUserButton(node);
+    return;
+  }
+  slot.innerHTML = '<button type="button" class="auth-btn" id="signInBtn">Entrar</button>';
+  document.getElementById('signInBtn').addEventListener('click', () => {
+    if(typeof clerk.openSignIn === 'function') clerk.openSignIn({});
+  });
+}
+
+async function setupAuth(){
+  const cfg = albumConfig();
+  if(!cfg.clerkPublishableKey){
+    setAuthNote('Álbum en este dispositivo');
+    return;
+  }
+  try{
+    await Promise.race([
+      (async () => {
+        const host = clerkHost(cfg.clerkPublishableKey);
+        await loadScript(`https://${host}/npm/@clerk/ui@1/dist/ui.browser.js`);
+        await loadScript(`https://${host}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`, {
+          'data-clerk-publishable-key': cfg.clerkPublishableKey,
+        });
+        if(typeof window.Clerk === 'function'){
+          window.Clerk = new window.Clerk(cfg.clerkPublishableKey);
+        }
+        if(!window.Clerk || typeof window.Clerk.load !== 'function'){
+          throw new Error('Clerk no está listo');
+        }
+        await window.Clerk.load();
+      })(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Clerk tardó demasiado')), 8000)),
+    ]);
+    if(typeof window.Clerk.addListener === 'function'){
+      window.Clerk.addListener(() => {
+        paintAuthSlot();
+        if(!authListenerReady) return;
+        loadCollection().then(() => render());
+      });
+    }
+    paintAuthSlot();
+    authListenerReady = true;
+  }catch(e){
+    console.error(e);
+    setAuthNote('Login no disponible. Álbum en este dispositivo.');
+  }
+}
+
+function loadOptionalScript(src){
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
+
+function exportCollection(){
+  const blob = new Blob([JSON.stringify(state.collection, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const fecha = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `mi-album-pokemon-${fecha}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Colección exportada');
+}
+
+function importCollection(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      const imported = JSON.parse(ev.target.result);
+      if(!Array.isArray(imported)) throw new Error('El archivo no tiene el formato esperado');
+      let añadidas = 0, actualizadas = 0;
+      imported.forEach(card=>{
+        if(!card || !card.id) return;
+        const existing = state.collection.find(c => c.id === card.id);
+        if(existing){
+          existing.qty = Math.max(existing.qty, card.qty || 1);
+          actualizadas++;
+        }else{
+          state.collection.push({ ...card, qty: card.qty || 1 });
+          añadidas++;
+        }
+      });
+      saveCollection();
+      render();
+      showToast(`Importadas ${añadidas} nuevas, ${actualizadas} actualizadas`);
+    }catch(err){
+      console.error(err);
+      showToast('El archivo no es una colección válida');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/* ---------- catálogo local (sin APIs externas) ---------- */
+/*
+  Los datos viven junto a la app, en ./data/:
+    data/sets.json          -> lista de expansiones
+    data/cards/{setId}.json -> cartas de una expansión (para el casillero)
+    data/index.json         -> TODAS las cartas juntas, para buscar y para
+                                emparejar lo que detecta el escáner
+  Los precios (eur/usd) son una foto fija del momento en que se generó el
+  catálogo: no se actualizan solos, pero tampoco dependen de ninguna API en
+  vivo, así que nunca fallan por red.
+*/
+
+function normalizeTcgdexAsset(url, kind='card', quality='low', extension='webp') {
+  if (!url || typeof url !== 'string') return url || '';
+  if (!url.includes('assets.tcgdex.net')) return url;
+  const clean = url.split('?')[0];
+  if (/\.(png|jpe?g|webp)$/i.test(clean)) return url;
+  if (kind === 'symbol' || kind === 'logo') return clean + '/' + kind + '.' + extension;
+  return clean + '/' + quality + '.' + extension;
+}
+
+function mapLocalCard(c){
+  return {
+    id: c.id,
+    name: c.name,
+    number: c.number,
+    setId: c.setId,
+    setName: c.setName,
+    setTotal: c.setTotal,
+    image: normalizeTcgdexAsset(c.image, 'card', 'low', 'webp'),
+    cardmarketEUR: (typeof c.eur === 'number') ? c.eur : null,
+    tcgplayerUSD: (typeof c.usd === 'number') ? c.usd : null
+  };
+}
+
+let globalIndexPromise = null;
+async function ensureGlobalIndex(){
+  if(state.globalIndex) return state.globalIndex;
+  if(!globalIndexPromise){
+    globalIndexPromise = fetch('./data/index.json')
+      .then(res=>{
+        if(!res.ok) throw new Error(`No se pudo cargar el índice de cartas (HTTP ${res.status})`);
+        return res.json();
+      })
+      .then(raw=>{
+        state.globalIndex = raw.map(mapLocalCard);
+        return state.globalIndex;
+      });
+  }
+  return globalIndexPromise;
+}
+
+/* ── Sistema pHash ────────────────────────────────────────────────────────────
+   Carga data/phash.json (generado por compute_hashes.js) y permite buscar
+   la carta visualmente más parecida a un canvas capturado.
+
+   Si phash.json no existe o está vacío, el sistema se desactiva graciosamente
+   y la app sigue funcionando solo con OCR.
+*/
+let phashIndex = null;      // { "A1-001": "a3f2e1b4..." }
+let phashPromise = null;
+
+async function ensurePhash(){
+  if(phashIndex !== null) return phashIndex;
+  if(phashPromise) return phashPromise;
+  phashPromise = fetch('./data/phash.json')
+    .then(r => r.ok ? r.json() : {})
+    .then(data => {
+      phashIndex = data;
+      const n = Object.keys(data).length;
+      if(n > 0) console.log(`[pHash] Índice cargado: ${n} cartas`);
+      else console.log('[pHash] Índice vacío — ejecuta compute_hashes.js para activarlo');
+      return phashIndex;
+    })
+    .catch(() => { phashIndex = {}; return phashIndex; });
+  return phashPromise;
+}
+
+/* DCT-II 1D sobre un Float64Array */
+function dct1d(sig){
+  const N=sig.length, out=new Float64Array(N), pi=Math.PI;
+  for(let k=0;k<N;k++){
+    let s=0;
+    for(let n=0;n<N;n++) s+=sig[n]*Math.cos(pi*k*(2*n+1)/(2*N));
+    out[k]=s;
+  }
+  return out;
+}
+
+/* DCT-II 2D separable (filas luego columnas) */
+function dct2d(input, N){
+  const tmp=new Float64Array(N*N), out=new Float64Array(N*N);
+  for(let r=0;r<N;r++){const d=dct1d(input.slice(r*N,(r+1)*N));for(let c=0;c<N;c++) tmp[r*N+c]=d[c];}
+  for(let c=0;c<N;c++){
+    const col=new Float64Array(N);
+    for(let r=0;r<N;r++) col[r]=tmp[r*N+c];
+    const d=dct1d(col);
+    for(let r=0;r<N;r++) out[r*N+c]=d[r];
+  }
+  return out;
+}
+
+/**
+ * Calcula el pHash DCT-64 de un HTMLCanvasElement.
+ * Devuelve string hex de 16 chars (64 bits).
+ */
+function computePhashFromCanvas(canvas){
+  const N=32, H=8;
+  // Redimensionar a 32×32 usando un canvas auxiliar
+  const tmp=document.createElement('canvas'); tmp.width=N; tmp.height=N;
+  const tctx=tmp.getContext('2d');
+  tctx.drawImage(canvas,0,0,N,N);
+  const px=tctx.getImageData(0,0,N,N).data;
+
+  // Escala de grises perceptual
+  const gray=new Float64Array(N*N);
+  for(let i=0,p=0;i<px.length;i+=4,p++)
+    gray[p]=0.299*px[i]+0.587*px[i+1]+0.114*px[i+2];
+
+  const dct=dct2d(gray,N);
+
+  // Bloque 8×8 superior-izquierdo
+  const block=new Float64Array(H*H);
+  for(let r=0;r<H;r++) for(let c=0;c<H;c++) block[r*H+c]=dct[r*N+c];
+
+  // Mediana (sin DC)
+  const nodc=Float64Array.from(block.slice(1)).sort();
+  const mid=Math.floor(nodc.length/2);
+  const median=nodc.length%2===0?(nodc[mid-1]+nodc[mid])/2:nodc[mid];
+
+  // Binarizar → BigInt → hex
+  let hash=0n;
+  for(let i=0;i<64;i++) if(block[i]>median) hash|=(1n<<BigInt(63-i));
+  return hash.toString(16).padStart(16,'0');
+}
+
+/** Distancia de Hamming entre dos hashes hex de 16 chars */
+function hammingDistance(a, b){
+  let x=BigInt('0x'+a)^BigInt('0x'+b), d=0;
+  while(x){ d+=Number(x&1n); x>>=1n; }
+  return d;
+}
+
+/**
+ * Busca las N cartas visualmente más similares al canvas dado.
+ * Devuelve array de { card, distance } ordenado de menor a mayor distancia.
+ * Solo busca si hay al menos 100 hashes en el índice.
+ *
+ * @param {HTMLCanvasElement} canvas  Frame capturado (el ROI de carta completa)
+ * @param {number} topN              Cuántos candidatos devolver (default 5)
+ * @param {number} maxDist           Distancia máxima para incluir (default 25)
+ */
+async function findByPhash(canvas, topN=5, maxDist=25){
+  const index  = await ensurePhash();
+  const cards  = await ensureGlobalIndex();
+  const nHashes = Object.keys(index).length;
+  if(nHashes < 100) return [];  // índice vacío o muy pequeño, no usar
+
+  const queryHash = computePhashFromCanvas(canvas);
+
+  // Comparar contra todos los hashes
+  const results = [];
+  for(const [id, hash] of Object.entries(index)){
+    const d = hammingDistance(queryHash, hash);
+    if(d <= maxDist) results.push({ id, distance: d });
+  }
+
+  // Ordenar por distancia y tomar top N
+  results.sort((a,b) => a.distance - b.distance);
+  const top = results.slice(0, topN);
+
+  // Resolver IDs a objetos de carta
+  const cardMap = new Map(cards.map(c=>[c.id,c]));
+  return top
+    .map(r => ({ card: cardMap.get(r.id), distance: r.distance }))
+    .filter(r => r.card);
+}
+
+
+
+/* Búsqueda por nombre (pestaña Buscar y modo Foto individual) */
+async function searchCards(name){
+  const clean = name.trim().toLowerCase().replace(/[^a-z0-9àáâãäåæçèéêëìíîïðñòóôõöùúûüýþÿ\-' ]/g,'');
+  if(!clean || clean.length < 2) return [];
+  const index = await ensureGlobalIndex();
+  const exact = [], starts = [], fuzzy = [];
+  for(const c of index){
+    const n = (c.name || '').toLowerCase();
+    if(n === clean){ exact.push(c); continue; }
+    if(n.startsWith(clean) || clean.startsWith(n.slice(0, Math.max(4, n.length-2)))){ starts.push(c); continue; }
+    // Fuzzy: tolerar 1-2 caracteres de diferencia al inicio (OCR corta nombres)
+    if(clean.length >= 4 && n.startsWith(clean.slice(0, Math.max(3, clean.length-2)))){ fuzzy.push(c); }
+  }
+  // Deduplicar y limitar
+  const seen = new Set();
+  const out = [];
+  for(const c of [...exact, ...starts, ...fuzzy]){
+    if(!seen.has(c.id)){ seen.add(c.id); out.push(c); }
+    if(out.length >= 12) break;
+  }
+  return out;
+}
+
+/* Expansiones (pestaña Expansiones) */
+async function fetchAllSets(){
+  const res = await fetch('./data/sets.json');
+  if(!res.ok) throw new Error(`No se pudo cargar el catálogo de expansiones (HTTP ${res.status})`);
+  return res.json().then(sets => sets.map(s => ({...s, symbol: normalizeTcgdexAsset(s.symbol, 'symbol', 'low', 'webp')})));
+}
+
+async function fetchSetCards(set){
+  const res = await fetch(`./data/cards/${set.id}.json`);
+  if(!res.ok) throw new Error(`No se pudieron cargar las cartas de "${set.name}" (HTTP ${res.status})`);
+  const raw = await res.json();
+  return raw.map(mapLocalCard);
+}
+
+/* ---------- emparejado por número/total (el "054/198" de la esquina) ---------- */
+/* Es mucho más fiable que leer el nombre: casi todas las cartas modernas
+   imprimen abajo a la izquierda su número dentro de la expansión y el total
+   de cartas de esa expansión, en un tipo de letra sencillo fácil de leer. */
+
+/* Tabla de códigos impresos en la carta → setId del catálogo.
+   Formato impreso: "TEF en 123/162"  →  setId: "sv05"
+   El sufijo de idioma (en/es/fr/de/it/pt/ja/ko…) se ignora. */
+const SET_CODE_MAP = {
+  // Scarlet & Violet era
+  'SVI':'sv01','PAL':'sv02','OBF':'sv03','MEW':'sv03.5',
+  'PAR':'sv04','PAF':'sv04.5','TEF':'sv05','TWM':'sv06',
+  'SFA':'sv06.5','SCR':'sv07','SSP':'sv08','PRE':'sv08.5',
+  'JTA':'sv09',
+  // Sword & Shield era
+  'SSH':'swsh1','RCL':'swsh2','DAA':'swsh3','VIV':'swsh4',
+  'SHF':'swsh4.5','BST':'swsh5','CRE':'swsh6','EVS':'swsh7',
+  'FST':'swsh8','BRS':'swsh9','ASR':'swsh10','LOR':'swsh11',
+  'SIT':'swsh12','CRZ':'swsh12.5','SIL':'swsh12.5gg',
+  'PGO':'swshp','CEL':'cel25',
+  // Sun & Moon era
+  'SUM':'sm1','GRI':'sm2','BUS':'sm3','SLG':'sm3.5',
+  'CIN':'sm4','UPR':'sm5','FLI':'sm6','CES':'sm7',
+  'LOT':'sm8','TEU':'sm9','DRM':'sm9.5','UNM':'sm10',
+  'UNB':'sm11','CEC':'sm12','HIF':'sm12.5','DET':'det1',
+  // Black & White era (por si acaso)
+  'BLW':'bw1','EPO':'bw2','NVI':'bw3','NXD':'bw4',
+  'DEX':'bw5','DRX':'bw6','BCR':'bw7','PLS':'bw8',
+  'PLF':'bw9','PLB':'bw10','LTR':'bw11',
+  // Pocket
+  'A1':'A1','A1A':'A1a','A2':'A2','A2A':'A2a','A2B':'A2b','A3':'A3',
+};
+const LANG_SUFFIXES = new Set(['EN','ES','FR','DE','IT','PT','JA','KO','ZH','TH','ID','RU','NL','PL']);
+
+/* Dado el texto OCR del recuadro de número, extrae el código de set impreso.
+   Ejemplos de entrada: "TEF en 123/162", "PAR es 054/182 ", "SV05en123/162"
+   Devuelve el setId del catálogo o '' si no lo reconoce. */
+function extractSetCode(text){
+  const lines = String(text||'').toUpperCase().split(/[\n\r]+/);
+  for(const line of lines){
+    // Buscar token de 2-4 letras mayúsculas que sea un código conocido
+    const tokens = line.split(/[\s\-_\/\.]+/);
+    for(const tok of tokens){
+      // Quitar sufijo de idioma: "TEFEN" → "TEF", "PARES" → "PAR"
+      let code = tok.replace(/[^A-Z0-9]/g,'');
+      if(code.length>2 && LANG_SUFFIXES.has(code.slice(-2))) code = code.slice(0,-2);
+      if(code.length>2 && LANG_SUFFIXES.has(code.slice(-2))) code = code.slice(0,-2); // doble por si hay "SVIEN"
+      if(SET_CODE_MAP[code]) return SET_CODE_MAP[code];
+      // Pocket: A1, A2, etc
+      if(/^[A-Z]\d[A-Z]?$/.test(code) && SET_CODE_MAP[code]) return SET_CODE_MAP[code];
+    }
+  }
+  return '';
+}
+
+/* Busca cartas que coincidan en número, total Y setId.
+   Si setId es '' cae al matching solo por número/total. */
+async function matchByNumberAndSet(fractions, setId){
+  if(!fractions.length) return [];
+  const index = await ensureGlobalIndex();
+  const results = [];
+  const seen = new Set();
+  for(const frac of fractions){
+    for(const c of index){
+      const n = parseInt((c.number||'').replace(/\D/g,''),10);
+      if(n !== frac.number || c.setTotal !== frac.total) continue;
+      if(setId && c.setId !== setId) continue; // filtro de set si lo tenemos
+      if(!seen.has(c.id)){ seen.add(c.id); results.push(c); }
+    }
+  }
+  // Si no encontró nada con el filtro de set, intentar sin él
+  if(!results.length && setId){
+    return matchByNumberAndSet(fractions, '');
+  }
+  return results;
+}
+
+/* ── Rareza por posición numérica ──────────────────────────────────────────
+   Las cartas TCG SV se ordenan así dentro de cada set:
+     n ≤ setTotal          → common / uncommon / rare / double rare
+     setTotal < n ≤ total+~60  → ultra rare (full-art ex, supporter full-art)
+     n > setTotal+60       → illustration rare / special illustration / hyper rare
+   Devuelve: 'regular' | 'ultra' | 'secret'
+*/
+function rarityTierFromNumber(cardNumber, setTotal){
+  const n = parseInt(String(cardNumber).replace(/\D/g,''), 10);
+  const t = parseInt(setTotal, 10);
+  if(isNaN(n) || isNaN(t) || t === 0) return 'unknown';
+  if(n <= t) return 'regular';
+  if(n <= t + 65) return 'ultra';
+  return 'secret';
+}
+
+/* ── Color dominante desde canvas ──────────────────────────────────────────
+   Analiza la zona superior-izquierda del frame (donde está el símbolo de
+   tipo en las cartas SV) y devuelve el matiz dominante (0-360) y la
+   saturación media. Menos de 300ms en móvil moderno.
+   
+   Tipos SV → rango de matiz dominante del fondo de la carta:
+     grass      80-140   fire       5-35    water     185-225
+     lightning  40-65    psychic   285-340  fighting   10-35
+     metal     185-220   dragon    230-275  darkness  (bajo sat.)
+     colorless (bajo sat. / muy claro)
+*/
+function dominantHueFromCanvas(canvas){
+  try {
+    const W = canvas.width, H = canvas.height;
+    // Solo analizar la mitad izquierda y el tercio superior (zona del tipo)
+    const ctx = canvas.getContext('2d', {willReadFrequently: true});
+    const x0=0, y0=0, w=Math.floor(W*0.5), h=Math.floor(H*0.35);
+    const px = ctx.getImageData(x0, y0, w, h).data;
+    
+    // Acumular hue con peso por saturación
+    const bins = new Float32Array(36); // 10° por bin
+    for(let i=0; i<px.length; i+=4){
+      const r=px[i]/255, g=px[i+1]/255, b=px[i+2]/255;
+      const cmax=Math.max(r,g,b), cmin=Math.min(r,g,b), delta=cmax-cmin;
+      if(delta < 0.18 || cmax < 0.15 || cmax > 0.95) continue; // skip gray/black/white
+      const sat = delta/cmax;
+      let hue=0;
+      if(cmax===r) hue=60*((g-b)/delta%6);
+      else if(cmax===g) hue=60*((b-r)/delta+2);
+      else hue=60*((r-g)/delta+4);
+      if(hue<0) hue+=360;
+      bins[Math.floor(hue/10)%36] += sat; // peso = saturación
+    }
+    
+    // Suavizar bins (ventana 3) para reducir ruido
+    const smooth = new Float32Array(36);
+    for(let i=0;i<36;i++) smooth[i]=(bins[(i+35)%36]+bins[i]*2+bins[(i+1)%36])/4;
+    
+    const peakBin = smooth.indexOf(Math.max(...smooth));
+    const totalWeight = smooth.reduce((a,b)=>a+b,0);
+    const dominantHue = peakBin * 10 + 5;
+    const confidence = totalWeight > 50 ? Math.min(1, smooth[peakBin]/totalWeight*3) : 0;
+    
+    return { hue: dominantHue, confidence };
+  } catch(e) {
+    return { hue: 0, confidence: 0 };
+  }
+}
+
+/* Mapea un matiz a una lista de tipos posibles con puntuación 0-1 */
+function hueToTypeScores(hue, confidence){
+  if(confidence < 0.15) return {}; // señal demasiado débil
+  const TYPE_RANGES = {
+    grass:      [[80,140]],
+    fire:       [[5,35],[345,360],[0,5]],
+    water:      [[185,225]],
+    lightning:  [[40,65]],
+    psychic:    [[285,345]],
+    fighting:   [[10,38]],
+    metal:      [[185,220]],
+    dragon:     [[230,275]],
+  };
+  const scores = {};
+  for(const [type, ranges] of Object.entries(TYPE_RANGES)){
+    let best = 0;
+    for(const [lo,hi] of ranges){
+      const mid=(lo+hi)/2, half=(hi-lo)/2+20;
+      let diff=Math.abs(hue-mid);
+      if(diff>180) diff=360-diff;
+      best=Math.max(best, Math.max(0,1-diff/half));
+    }
+    if(best > 0.1) scores[type] = best * confidence;
+  }
+  return scores;
+}
+
+/* ── Scoring combinado ─────────────────────────────────────────────────────
+   Puntúa una carta candidata según las señales disponibles.
+   NUNCA elimina candidatos, solo reordena.
+   Máximo de bonus: +3 por rareza + +2 por tipo = +5 sobre la puntuación base.
+   La puntuación base del número coincidente ya es 10, así que el bonus
+   representa como máximo un 33% del total — suficiente para desempatar
+   pero no para tapar errores de número.
+*/
+function applySignalBonus(cards, signals){
+  const { rarityHint, typeScores } = signals;
+  if(!rarityHint && !Object.keys(typeScores||{}).length) return cards;
+  
+  return cards.map(c => {
+    let bonus = 0;
+    const n = parseInt(String(c.number||'').replace(/\D/g,''),10);
+    const t = c.setTotal;
+    
+    // Bonus de rareza: solo si la señal coincide
+    if(rarityHint){
+      const tier = rarityTierFromNumber(n, t);
+      if(tier === rarityHint) bonus += 3;
+      else if(tier !== 'unknown' && rarityHint !== 'unknown') bonus -= 1; // penalización suave
+    }
+    
+    // Bonus de tipo: requiere que el nombre del Pokémon encaje con los colores detectados
+    // No tenemos el tipo en el catálogo, pero podemos inferirlo del orden numérico
+    // → este bonus es puramente por color, aplicamos el score máximo del tipo
+    if(typeScores && Object.keys(typeScores).length > 0){
+      // Sin info de tipo en catálogo, el bonus de color es estático
+      // Pero podemos al menos distinguir: si la carta es "ex" (double rare),
+      // su fondo tiene el color del tipo del Pokémon. Las cartas regulares también.
+      // Aplicar un bonus pequeño basado en confianza general del color detectado
+      const maxScore = Math.max(...Object.values(typeScores));
+      if(maxScore > 0.6) bonus += 1; // confianza alta en el color
+      else if(maxScore > 0.35) bonus += 0.5;
+    }
+    
+    return { ...c, _bonus: bonus };
+  }).sort((a,b) => (b._bonus||0) - (a._bonus||0) || 0);
+}
+
+function extractNumberFraction(text){
+  // Correcciones OCR comunes en dígitos
+  let t = String(text||'')
+    .replace(/[Oo]/g,'0').replace(/[Il|¡]/g,'1').replace(/[Ss]/g,'5')
+    .replace(/[Zz]/g,'2').replace(/[Bb]/g,'8').replace(/[Gg]/g,'6');
+
+  const out=[]; const seen=new Set();
+  const push=(num,tot)=>{
+    num=parseInt(num,10); tot=parseInt(tot,10);
+    if(isNaN(num)||isNaN(tot)||num<=0||tot<=0||num>tot||tot>999) return;
+    const k=num+'/'+tot; if(!seen.has(k)){seen.add(k);out.push({number:num,total:tot});}
+  };
+
+  // Estrategia 1: NUM/TOTAL con barra — la más fiable
+  for(const m of t.matchAll(/(\d{1,3})\s*\/\s*(\d{2,3})/g)) push(m[1],m[2]);
+
+  // Estrategia 2: NUM TOTAL sin barra, con separador de espacio
+  if(!out.length)
+    for(const m of t.matchAll(/\b(\d{1,3})\s{1,3}(\d{2,3})\b/g)) push(m[1],m[2]);
+
+  // Estrategia 3: extraer todos los números de 2-3 dígitos en orden
+  // y probar combinaciones. Útil cuando el OCR parte "128/182" en "128 182"
+  if(!out.length){
+    const nums=[...t.matchAll(/\b(\d{2,3})\b/g)].map(m=>parseInt(m[1],10)).filter(n=>n>0&&n<1000);
+    // probar pares consecutivos
+    for(let i=0;i<nums.length-1;i++) push(nums[i],nums[i+1]);
+  }
+
+  return out;
+}
+
+async function matchByNumberFraction(fractions){
+  if(!fractions.length) return [];
+  const index = await ensureGlobalIndex();
+  const results = [];
+  for(const frac of fractions){
+    for(const c of index){
+      const n = parseInt((c.number || '').replace(/\D/g,''), 10);
+      if(n === frac.number && c.setTotal === frac.total){
+        results.push(c);
+      }
+    }
+  }
+  const seen = new Set();
+  return results.filter(c => {
+    if(seen.has(c.id)) return false;
+    seen.add(c.id);
+    return true;
+  });
+}
+
+function naturalCardSort(a, b){
+  const na = parseInt((a.number || '').replace(/\D/g, ''), 10);
+  const nb = parseInt((b.number || '').replace(/\D/g, ''), 10);
+  if(!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+  return (a.number || '').localeCompare(b.number || '');
+}
+
+function setOrderFor(setId, setName){
+  if(!state.expansion.sets) return 0;
+  const found = state.expansion.sets.find(s => s.id === setId || s.name === setName);
+  return found ? found.order : 0;
+}
+
+function ownedCountForSet(setId, setName){
+  const ids = new Set();
+  state.collection.forEach(c=>{
+    if((c.setId && c.setId === setId) || (!c.setId && c.setName === setName)) ids.add(c.id);
+  });
+  return ids.size;
+}
+
+function qtyForCardId(id){
+  const item = state.collection.find(c => c.id === id);
+  return item ? item.qty : 0;
+}
+
+/* ---------- ocr ---------- */
+function resizeImage(file, maxWidth=900){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('No se pudo leer la imagen'));
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.9));
+      };
+      img.onerror = () => reject(new Error('Imagen no válida'));
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function escapeHtml(value){
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function guessNameFromText(text){
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  for(const line of lines.slice(0,6)){
+    const cleaned = line.replace(/[^A-Za-zÀ-ÿ'’\- ]/g,'').trim();
+    if(cleaned.length >= 3 && cleaned.length <= 24) return cleaned;
+  }
+  return '';
+}
+
+const RECOGNITION_LANGUAGE_SUFFIXES = new Set(['EN','ES','FR','DE','IT','PT','JA','KO','ZH','TH','ID','RU','NL','PL']);
+let recognitionCatalogPromise = null;
+let recognitionCatalog = null;
+let liveScanTimer = null;
+let liveStableCandidateId = '';
+let liveStableCount = 0;
+let liveStableScore = 0;
+const LIVE_SCAN_INTERVAL_MS = 320;
+const LIVE_CONFIRM_STREAK = 3;
+const LIVE_CONFIRM_SCORE = 0.88;
+const LIVE_AUTO_LOCK_MS = 1800;
+
+function normalizeRecognitionSetCode(value){
+  const cleaned = String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if(!cleaned) return '';
+  if(cleaned.length > 2 && RECOGNITION_LANGUAGE_SUFFIXES.has(cleaned.slice(-2))){
+    return cleaned.slice(0, -2);
+  }
+  return cleaned;
+}
+
+function normalizeRecognitionCardNumber(value){
+  const cleaned = String(value ?? '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+  if(!cleaned) return '';
+  const match = cleaned.match(/^0*(\d+)([A-Z]*)$/);
+  if(match) return `${match[1]}${match[2] || ''}`;
+  return cleaned;
+}
+
+function matchesSetCodeWithinOneEdit(a, b){
+  if(!a || !b) return false;
+  if(a === b) return true;
+  if(Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while(i < a.length && j < b.length){
+    if(a[i] === b[j]){
+      i += 1;
+      j += 1;
+      continue;
+    }
+    edits += 1;
+    if(edits > 1) return false;
+    if(a.length > b.length){
+      i += 1;
+    }else if(b.length > a.length){
+      j += 1;
+    }else{
+      i += 1;
+      j += 1;
+    }
+  }
+  return true;
+}
+
+function resolveClosestSetCode(input, codes){
+  if(!input) return '';
+  if(codes.includes(input)) return input;
+  let best = '';
+  let bestPrefix = -1;
+  for(const code of codes){
+    if(!matchesSetCodeWithinOneEdit(input, code)) continue;
+    let prefix = 0;
+    while(prefix < input.length && prefix < code.length && input[prefix] === code[prefix]) prefix += 1;
+    if(prefix > bestPrefix){
+      bestPrefix = prefix;
+      best = code;
+    }
+  }
+  return best;
+}
+
+async function ensureRecognitionCatalog(){
+  if(recognitionCatalog) return recognitionCatalog;
+  if(!recognitionCatalogPromise){
+    recognitionCatalogPromise = ensureGlobalIndex().then(index => {
+      const bySetCode = new Map();
+      const setCodes = [];
+      const seen = new Set();
+      for(const card of index){
+        const setCode = normalizeRecognitionSetCode(card.setId);
+        if(!bySetCode.has(setCode)) bySetCode.set(setCode, []);
+        bySetCode.get(setCode).push(card);
+        if(!seen.has(setCode)){
+          seen.add(setCode);
+          setCodes.push(setCode);
+        }
+      }
+      recognitionCatalog = { index, bySetCode, setCodes };
+      return recognitionCatalog;
+    });
+  }
+  return recognitionCatalogPromise;
+}
+
+function extractRecognitionSignals(text){
+  const lines = String(text || '').split(/\n+/).map(line => line.trim()).filter(Boolean);
+  const out = [];
+  const seen = new Set();
+  const push = (setCode, number, total, rawLine) => {
+    const normalizedSetCode = normalizeRecognitionSetCode(setCode);
+    const normalizedNumber = normalizeRecognitionCardNumber(number);
+    const normalizedTotal = parseInt(total, 10);
+    if(!normalizedNumber || !Number.isFinite(normalizedTotal)) return;
+    const key = `${normalizedSetCode}|${normalizedNumber}|${normalizedTotal}`;
+    if(seen.has(key)) return;
+    seen.add(key);
+    out.push({ setCode: normalizedSetCode, number: normalizedNumber, total: normalizedTotal, rawLine });
+  };
+
+  for(const originalLine of lines){
+    const line = originalLine.replace(/[|•·]/g, ' ').replace(/\s+/g, ' ').trim();
+    if(!line) continue;
+
+    for(const match of line.matchAll(/(\d{1,3}[A-Za-z]?)\s*\/\s*(\d{1,3})/g)){
+      const before = line.slice(0, match.index).trim();
+      const tokens = before.split(/\s+/).filter(Boolean);
+      let setToken = tokens.length ? tokens[tokens.length - 1] : '';
+      if(tokens.length >= 2 && /^\d+$/.test(tokens[tokens.length - 1])) setToken = tokens[tokens.length - 2];
+      push(setToken, match[1], match[2], originalLine);
+    }
+
+    for(const match of line.matchAll(/(\d{1,3}[A-Za-z]?)\s{1,3}(\d{1,3})/g)){
+      const before = line.slice(0, match.index).trim();
+      const tokens = before.split(/\s+/).filter(Boolean);
+      let setToken = tokens.length ? tokens[tokens.length - 1] : '';
+      if(tokens.length >= 2 && /^\d+$/.test(tokens[tokens.length - 1])) setToken = tokens[tokens.length - 2];
+      push(setToken, match[1], match[2], originalLine);
+    }
+  }
+
+  return out;
+}
+
+function queueLiveRecognitionFrame(delay = LIVE_SCAN_INTERVAL_MS){
+  if(liveScanTimer){
+    clearTimeout(liveScanTimer);
+    liveScanTimer = null;
+  }
+  if(!state.scan.liveActive) return;
+  liveScanTimer = setTimeout(() => {
+    liveScanTimer = null;
+    captureAndRecognize();
+  }, Math.max(0, delay));
+}
+
+function resetLiveRecognitionStability(){
+  liveStableCandidateId = '';
+  liveStableCount = 0;
+  liveStableScore = 0;
+}
+
+function maybeNormalizeRecognitionResult(result){
+  return {
+    card: result.card,
+    score: result.score,
+    signal: result.signal,
+    key: result.card.id
+  };
+}
+
+async function findRecognitionCandidates(signals){
+  if(!signals.length) return [];
+  const catalog = await ensureRecognitionCatalog();
+  const candidates = [];
+  const seen = new Map();
+  const push = (card, score, signal) => {
+    const existing = seen.get(card.id);
+    if(existing){
+      existing.score = Math.max(existing.score, score);
+      existing.signal = existing.signal || signal;
+      return;
+    }
+    const candidate = { card, score, signal, key: card.id };
+    seen.set(card.id, candidate);
+    candidates.push(candidate);
+  };
+
+  for(const signal of signals){
+    if(signal.setCode){
+      const exactCards = catalog.bySetCode.get(signal.setCode) || [];
+      for(const card of exactCards){
+        if(normalizeRecognitionCardNumber(card.number) === signal.number){
+          push(card, 0.96, signal);
+        }
+      }
+
+      const fuzzySetCode = resolveClosestSetCode(signal.setCode, catalog.setCodes);
+      if(fuzzySetCode && fuzzySetCode !== signal.setCode){
+        const fuzzyCards = catalog.bySetCode.get(fuzzySetCode) || [];
+        for(const card of fuzzyCards){
+          if(normalizeRecognitionCardNumber(card.number) === signal.number){
+            push(card, 0.86, signal);
+          }
+        }
+      }
+    }
+
+    if(signal.total && signal.number){
+      const numericNumber = parseInt(signal.number, 10);
+      if(Number.isFinite(numericNumber)){
+        const fractionMatches = await matchByNumberFraction([{ number: numericNumber, total: signal.total }]).catch(() => []);
+        for(const card of fractionMatches){
+          push(card, signal.setCode ? 0.72 : 0.62, signal);
+        }
+      }
+    }
+  }
+
+  return candidates.sort((a, b) => b.score - a.score || naturalCardSort(a.card, b.card)).map(maybeNormalizeRecognitionResult);
+}
+
+function shouldAutoConfirmCandidate(candidate, streak){
+  if(!candidate) return false;
+  if(candidate.score >= 0.94 && streak >= 2) return true;
+  if(candidate.score >= LIVE_CONFIRM_SCORE && streak >= LIVE_CONFIRM_STREAK) return true;
+  return false;
+}
+
+async function runOCR(dataUrl){
+  const { data } = await Tesseract.recognize(dataUrl, 'eng', { logger: ()=>{} });
+  return data.text || '';
+}
+
+async function ocrRecognitionCanvas(canvas){
+  if(!ocrWorker || !canvas?.width || !canvas?.height) return '';
+  const image = canvas.toDataURL('image/jpeg', 0.98);
+  await ocrWorker.setParameters({
+    tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz/.- ',
+    tessedit_pageseg_mode: '7',
+    user_defined_dpi: '320'
+  });
+  const result = await ocrWorker.recognize(image);
+  return result?.data?.text || '';
+}
+
+/* ---------- cámara en vivo ---------- */
+let mediaStream = null;
+let ocrWorker = null;
+let cameraTrack = null;
+let liveBusy = false;
+
+async function startLiveScan(){
+  if(state.scan.liveActive || state.scan.liveStatus === 'starting') return;
+  state.scan.liveActive = true;
+  state.scan.liveStatus = 'starting';
+  state.scan.livePhase = 'adjust';
+  state.scan.liveMessage = 'Solicitando acceso a la cámara…';
+  state.scan.liveText = '';
+  state.scan.liveError = '';
+  state.scan.suggestions = [];
+  state.scan.cooldownUntil = 0;
+  resetLiveRecognitionStability();
+  state.scan.zoom = 1;
+  state.scan.zoomMin = 1;
+  state.scan.zoomMax = 3;
+  state.scan.zoomStep = 0.1;
+  state.scan.hardwareZoom = false;
+  state.scan.roi    = { x: 0.08, y: 0.05, w: 0.84, h: 0.90 };
+  state.scan.roiNum = { x: 0.52, y: 0.84, w: 0.36, h: 0.09 };
+  render();
+
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    state.scan.liveActive = false;
+    state.scan.liveStatus = 'error';
+    state.scan.livePhase = 'idle';
+    state.scan.liveError = 'Este navegador no permite acceder a la cámara. Abre la app con HTTPS y comprueba los permisos del sitio.';
+    render();
+    return;
+  }
+
+  try{
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30, max: 30 }
+      },
+      audio: false
+    });
+    cameraTrack = mediaStream.getVideoTracks()[0] || null;
+    if(!cameraTrack) throw new Error('El navegador no devolvió ninguna cámara.');
+
+    setupCameraZoom();
+    try{
+      const caps = cameraTrack.getCapabilities ? cameraTrack.getCapabilities() : {};
+      if(caps.focusMode && Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')){
+        await cameraTrack.applyConstraints({advanced:[{focusMode:'continuous'}]});
+      }
+    }catch(e){ console.warn('No se pudo fijar enfoque continuo:', e); }
+
+    state.scan.liveMessage = 'Cámara activa. Ajusta zoom y mueve el recuadro sobre el número…';
+    const video = document.getElementById('liveVideo');
+    if(!video) throw new Error('No se pudo crear la vista de cámara.');
+    video.srcObject = mediaStream;
+    video.muted = true;
+    video.playsInline = true;
+    await video.play().catch(()=>{});
+    render();
+    requestAnimationFrame(()=>{
+      const finalVideo = document.getElementById('liveVideo');
+      if(finalVideo){
+        finalVideo.srcObject = mediaStream;
+        finalVideo.muted = true;
+        finalVideo.playsInline = true;
+        finalVideo.play().catch(()=>{});
+        updateCameraZoomUI();
+        updateRoiUI();
+      }
+    });
+    await beginLiveRecognition();
+  }catch(err){
+    console.error('Error al iniciar cámara:', err);
+    if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
+    cameraTrack=null;
+    state.scan.liveActive=false;
+    state.scan.liveStatus='error';
+    state.scan.livePhase='idle';
+    if(err?.name==='NotAllowedError') state.scan.liveError='Permiso de cámara denegado. Permite la cámara para este sitio y vuelve a intentarlo.';
+    else if(err?.name==='NotFoundError') state.scan.liveError='No se encontró ninguna cámara disponible en este dispositivo.';
+    else if(err?.name==='NotReadableError') state.scan.liveError='La cámara está siendo usada por otra aplicación o pestaña. Ciérrala y vuelve a intentarlo.';
+    else state.scan.liveError='No se pudo iniciar la cámara: '+(err?.message||err?.name||'error desconocido');
+    render();
+  }
+}
+
+function setupCameraZoom(){
+  const track=cameraTrack;
+  if(!track) return;
+  try{
+    const caps=track.getCapabilities?track.getCapabilities():{};
+    if(caps.zoom && Number.isFinite(caps.zoom.min) && Number.isFinite(caps.zoom.max)){
+      state.scan.hardwareZoom=true;
+      state.scan.zoomMin=Math.max(1,Number(caps.zoom.min));
+      state.scan.zoomMax=Math.max(state.scan.zoomMin,Math.min(5,Number(caps.zoom.max)));
+      state.scan.zoomStep=Number(caps.zoom.step)||0.1;
+      const settings=track.getSettings?track.getSettings():{};
+      state.scan.zoom=Number.isFinite(settings.zoom)?Number(settings.zoom):state.scan.zoomMin;
+    }else{
+      state.scan.hardwareZoom=false; state.scan.zoomMin=1; state.scan.zoomMax=3; state.scan.zoomStep=0.1; state.scan.zoom=1;
+    }
+  }catch(e){ state.scan.hardwareZoom=false; state.scan.zoomMin=1; state.scan.zoomMax=3; state.scan.zoomStep=0.1; state.scan.zoom=1; }
+}
+
+async function applyCameraZoom(value){
+  const min=state.scan.zoomMin||1, max=state.scan.zoomMax||3, step=state.scan.zoomStep||0.1;
+  let z=Math.max(min,Math.min(max,Number(value)||min));
+  z=Number((Math.round(z/step)*step).toFixed(2));
+  state.scan.zoom=z;
+  if(state.scan.hardwareZoom && cameraTrack?.applyConstraints){
+    try{ await cameraTrack.applyConstraints({advanced:[{zoom:z}]}); }
+    catch(e){ console.warn('No se pudo aplicar zoom de cámara:',e); state.scan.hardwareZoom=false; }
+  }
+  updateCameraZoomUI();
+}
+
+function updateCameraZoomUI(){
+  const video=document.getElementById('liveVideo'), range=document.getElementById('zoomRange'), value=document.getElementById('zoomValue');
+  if(video) video.style.setProperty('--camera-display-zoom', state.scan.hardwareZoom?'1':String(state.scan.zoom));
+  if(range){ range.min=state.scan.zoomMin; range.max=state.scan.zoomMax; range.step=state.scan.zoomStep; range.value=state.scan.zoom; }
+  if(value) value.textContent=`${state.scan.zoom.toFixed(1)}×`;
+}
+
+function updateRoiUI(){
+  const elCard = document.getElementById('roiCard');
+  const elNum  = document.getElementById('roiNum');
+  if(elCard){
+    const r = state.scan.roi;
+    elCard.style.left   = (r.x*100)+'%';
+    elCard.style.top    = (r.y*100)+'%';
+    elCard.style.width  = (r.w*100)+'%';
+    elCard.style.height = (r.h*100)+'%';
+  }
+  if(elNum){
+    const n = state.scan.roiNum;
+    elNum.style.left   = (n.x*100)+'%';
+    elNum.style.top    = (n.y*100)+'%';
+    elNum.style.width  = (n.w*100)+'%';
+    elNum.style.height = (n.h*100)+'%';
+  }
+}
+
+function attachRoiDrag(){
+  const wrap = document.querySelector('.video-wrap');
+  if(!wrap) return;
+
+  function makeDraggable(el, getS, setS){
+    if(!el) return;
+    let active=false, sx=0, sy=0, s0=null;
+    const down = e => {
+      active=true; s0={...getS()};
+      const p=e.touches?e.touches[0]:e; sx=p.clientX; sy=p.clientY;
+      el.setPointerCapture?.(e.pointerId); e.preventDefault(); e.stopPropagation();
+    };
+    const move = e => {
+      if(!active) return;
+      const p=e.touches?e.touches[0]:e;
+      const rect=wrap.getBoundingClientRect();
+      const dx=(p.clientX-sx)/rect.width, dy=(p.clientY-sy)/rect.height;
+      setS({ x:Math.max(0,Math.min(1-s0.w, s0.x+dx)), y:Math.max(0,Math.min(1-s0.h, s0.y+dy)), w:s0.w, h:s0.h });
+      updateRoiUI(); e.preventDefault();
+    };
+    const up = () => { active=false; };
+    el.addEventListener('pointerdown', down, {passive:false});
+    el.addEventListener('pointermove', move, {passive:false});
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  }
+
+  function makeResizable(el, getS, setS, minW, minH){
+    if(!el) return;
+    let active=false, sx=0, sy=0, s0=null;
+    const down = e => {
+      active=true; s0={...getS()};
+      const p=e.touches?e.touches[0]:e; sx=p.clientX; sy=p.clientY;
+      el.setPointerCapture?.(e.pointerId); e.preventDefault(); e.stopPropagation();
+    };
+    const move = e => {
+      if(!active) return;
+      const p=e.touches?e.touches[0]:e;
+      const rect=wrap.getBoundingClientRect();
+      const dx=(p.clientX-sx)/rect.width, dy=(p.clientY-sy)/rect.height;
+      setS({ x:s0.x, y:s0.y, w:Math.max(minW, Math.min(1-s0.x, s0.w+dx)), h:Math.max(minH, Math.min(1-s0.y, s0.h+dy)) });
+      updateRoiUI(); e.preventDefault();
+    };
+    const up = () => { active=false; };
+    el.addEventListener('pointerdown', down, {passive:false});
+    el.addEventListener('pointermove', move, {passive:false});
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  }
+
+  makeDraggable(document.getElementById('roiCard'), ()=>state.scan.roi, s=>{ state.scan.roi=s; });
+  makeDraggable(document.getElementById('roiNum'),  ()=>state.scan.roiNum, s=>{ state.scan.roiNum=s; });
+  makeResizable(document.getElementById('roiNumResize'), ()=>state.scan.roiNum, s=>{ state.scan.roiNum=s; }, 0.06, 0.04);
+}
+
+async function beginLiveRecognition(){
+  if(!state.scan.liveActive) return;
+  state.scan.livePhase='scanning';
+  state.scan.liveStatus='scanning';
+  state.scan.liveMessage='Cargando motor OCR…';
+  state.scan.liveText=''; state.scan.liveError=''; state.scan.suggestions=[];
+  render();
+  attachRoiDrag();
+  if(!ocrWorker){
+    try{
+      if(typeof Tesseract==='undefined') throw new Error('Tesseract.js no está cargado');
+      ocrWorker=await Tesseract.createWorker('eng',1,{logger:info=>{
+        if(info?.progress!=null && info.status){
+          state.scan.liveMessage=`${info.status} ${Math.round(info.progress*100)}%`;
+          const statusEl=document.getElementById('liveStatusText'); if(statusEl) statusEl.textContent=state.scan.liveMessage;
+        }
+      }});
+    }catch(e){
+      console.error(e); ocrWorker=null; state.scan.liveStatus='error'; state.scan.livePhase='adjust';
+      state.scan.liveError='No se pudo cargar el motor OCR. Comprueba tu conexión a Internet y recarga la página.'; render(); return;
+    }
+  }
+  state.scan.liveMessage='Listo. Ajusta los recuadros y pulsa Capturar.';
+  render();
+  requestAnimationFrame(()=>{ updateRoiUI(); attachRoiDrag(); });
+}
+
+function stopLiveScan(){
+  if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
+  mediaStream=null; cameraTrack=null; liveBusy=false;
+  if(liveScanTimer){ clearTimeout(liveScanTimer); liveScanTimer = null; }
+  resetLiveRecognitionStability();
+  state.scan.liveActive=false; state.scan.livePhase='idle'; state.scan.liveStatus='idle';
+  state.scan.liveMessage='Cámara detenida'; state.scan.liveError=''; state.scan.suggestions=[];
+  render();
+}
+
+function resetToAdjust(){
+  state.scan.livePhase='adjust'; state.scan.liveStatus='starting';
+  state.scan.liveMessage='Ajusta los recuadros y pulsa Capturar.';
+  state.scan.liveText=''; state.scan.liveError=''; state.scan.suggestions=[];
+  render();
+  requestAnimationFrame(()=>{
+    const v=document.getElementById('liveVideo');
+    if(v && mediaStream){v.srcObject=mediaStream;v.play().catch(()=>{});}
+    updateCameraZoomUI(); updateRoiUI(); attachRoiDrag();
+  });
+}
+
+function getVideoSourceRect(video){
+  const vw=video.videoWidth,vh=video.videoHeight;
+  const ew=video.clientWidth,eh=video.clientHeight;
+  const baseScale=Math.max(ew/vw,eh/vh);
+  // Si el navegador no ofrece zoom real, el vídeo se amplía con CSS.
+  // La captura debe usar exactamente la misma transformación para que el
+  // recuadro que ve el usuario corresponda al píxel que recibe el OCR.
+  const digitalZoom=state.scan.hardwareZoom?1:Math.max(1,Number(state.scan.zoom)||1);
+  const scale=baseScale*digitalZoom;
+  const rw=vw*scale,rh=vh*scale;
+  return {left:(ew-rw)/2,top:(eh-rh)/2,width:rw,height:rh};
+}
+
+function preprocessForOCR(srcCanvas){
+  const sw=srcCanvas.width, sh=srcCanvas.height;
+  const dst=document.createElement('canvas'); dst.width=sw; dst.height=sh;
+  const ctx=dst.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(srcCanvas,0,0);
+  const imgData=ctx.getImageData(0,0,sw,sh); const d=imgData.data;
+
+  // 1. Escala de grises perceptual
+  const gray=new Uint8Array(sw*sh);
+  for(let i=0,p=0;i<d.length;i+=4,p++)
+    gray[p]=Math.round(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]);
+
+  // 2. Unsharp mask 3×3 — realza bordes del texto
+  const blur=new Uint8Array(sw*sh);
+  for(let y=0;y<sh;y++) for(let x=0;x<sw;x++){
+    let s=0,w=0;
+    for(let ky=-1;ky<=1;ky++) for(let kx=-1;kx<=1;kx++){
+      const nx=x+kx,ny=y+ky;
+      if(nx>=0&&nx<sw&&ny>=0&&ny<sh){
+        const wt=[1,2,1,2,4,2,1,2,1][(ky+1)*3+(kx+1)]; s+=gray[ny*sw+nx]*wt; w+=wt;
+      }
+    }
+    blur[y*sw+x]=Math.round(s/w);
+  }
+  const sharp=new Uint8Array(sw*sh);
+  for(let i=0;i<gray.length;i++)
+    sharp[i]=Math.max(0,Math.min(255,Math.round(gray[i]+2.0*(gray[i]-blur[i]))));
+
+  // 3. Detectar si el texto es oscuro-sobre-claro o claro-sobre-oscuro
+  //    Calculamos la media de la zona central: si es >128 el fondo es claro
+  let sum=0, cnt=0;
+  const mx=Math.floor(sw*0.1), my=Math.floor(sh*0.1);
+  const mw=sw-2*mx, mh=sh-2*my;
+  for(let y=my;y<my+mh;y++) for(let x=mx;x<mx+mw;x++){sum+=sharp[y*sw+x];cnt++;}
+  const mean=sum/cnt;
+  // Si fondo claro (media>140) los dígitos son oscuros → binarizar normal
+  // Si fondo oscuro (media<115) los dígitos son claros → invertir resultado
+  const darkOnLight = mean > 128;
+
+  // 4. Binarización adaptativa (ventana 25px)
+  const R=12;
+  const integ=new Float64Array((sw+1)*(sh+1));
+  for(let y=0;y<sh;y++) for(let x=0;x<sw;x++){
+    integ[(y+1)*(sw+1)+(x+1)]=sharp[y*sw+x]
+      +integ[y*(sw+1)+(x+1)]+integ[(y+1)*(sw+1)+x]-integ[y*(sw+1)+x];
+  }
+  const out=new Uint8Array(sw*sh);
+  for(let y=0;y<sh;y++) for(let x=0;x<sw;x++){
+    const x1=Math.max(0,x-R),y1=Math.max(0,y-R),x2=Math.min(sw-1,x+R),y2=Math.min(sh-1,y+R);
+    const area=(x2-x1+1)*(y2-y1+1);
+    const s=integ[(y2+1)*(sw+1)+(x2+1)]-integ[y1*(sw+1)+(x2+1)]
+            -integ[(y2+1)*(sw+1)+x1]+integ[y1*(sw+1)+x1];
+    const localMean=s/area;
+    // pixel es texto si está suficientemente por debajo (oscuro) o encima (claro) del fondo local
+    const isText = darkOnLight ? sharp[y*sw+x] < localMean - 8
+                                : sharp[y*sw+x] > localMean + 8;
+    out[y*sw+x] = isText ? 0 : 255;  // negro=texto, blanco=fondo para Tesseract
+  }
+
+  // 5. Escribir resultado en el canvas destino
+  const od=ctx.createImageData(sw,sh);
+  for(let i=0,p=0;i<od.data.length;i+=4,p++){
+    od.data[i]=od.data[i+1]=od.data[i+2]=out[p]; od.data[i+3]=255;
+  }
+  ctx.putImageData(od,0,0);
+  return dst;
+}
+
+
+function captureRoiCanvas(video, roi){
+  if(!roi) roi=state.scan.roi;
+  const vw=video.videoWidth,vh=video.videoHeight;
+  const display=getVideoSourceRect(video);
+  const box={x:roi.x*video.clientWidth,y:roi.y*video.clientHeight,w:roi.w*video.clientWidth,h:roi.h*video.clientHeight};
+  const ix=Math.max(box.x,display.left),iy=Math.max(box.y,display.top);
+  const ax=Math.min(box.x+box.w,display.left+display.width),ay=Math.min(box.y+box.h,display.top+display.height);
+  const sx=Math.max(0,Math.round((ix-display.left)/display.width*vw));
+  const sy=Math.max(0,Math.round((iy-display.top)/display.height*vh));
+  const sw=Math.max(1,Math.min(vw-sx,Math.round((ax-ix)/display.width*vw)));
+  const sh=Math.max(1,Math.min(vh-sy,Math.round((ay-iy)/display.height*vh)));
+  // Escalar al menos 4× para dar píxeles suficientes al OCR en zonas pequeñas
+  const scale=Math.max(4,Math.min(8,3600/Math.max(sw,sh)));
+  const raw=document.createElement('canvas'); raw.width=Math.round(sw*scale); raw.height=Math.round(sh*scale);
+  const rctx=raw.getContext('2d',{willReadFrequently:true});
+  rctx.imageSmoothingEnabled=true; rctx.imageSmoothingQuality='high';
+  rctx.drawImage(video,sx,sy,sw,sh,0,0,raw.width,raw.height);
+  return preprocessForOCR(raw);
+}
+
+/* ocrCanvas — configurable por psm y whitelist */
+async function ocrCanvas(canvas, { psmMode='6', whitelist=null } = {}){
+  if(!ocrWorker || !canvas?.width || !canvas?.height) return '';
+  const image = canvas.toDataURL('image/png');
+  const params = { tessedit_pageseg_mode: psmMode, user_defined_dpi: '400' };
+  if(whitelist) params.tessedit_char_whitelist = whitelist;
+  else delete params.tessedit_char_whitelist;
+  await ocrWorker.setParameters(params);
+  const result = await ocrWorker.recognize(image);
+  return result?.data?.text || '';
+}
+
+/* canvasGrayscaleOnly — devuelve el canvas en escala de grises SIN binarizar,
+   útil como segunda pasada cuando la binarización destruye el contraste */
+function canvasGrayscaleOnly(srcCanvas){
+  const sw=srcCanvas.width, sh=srcCanvas.height;
+  const dst=document.createElement('canvas'); dst.width=sw; dst.height=sh;
+  const ctx=dst.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(srcCanvas,0,0);
+  const id=ctx.getImageData(0,0,sw,sh); const d=id.data;
+  for(let i=0;i<d.length;i+=4){
+    const g=Math.round(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]);
+    // Boost contraste suave (no binarizar): mapear 0-255 → expandir rango
+    const v=Math.max(0,Math.min(255,Math.round((g-80)*1.8)));
+    d[i]=d[i+1]=d[i+2]=v;
+  }
+  ctx.putImageData(id,0,0);
+  return dst;
+}
+
+/* captureRawCanvas — captura el ROI en gris SIN preprocessForOCR */
+function captureRawCanvas(video, roi){
+  if(!roi) roi=state.scan.roi;
+  const vw=video.videoWidth, vh=video.videoHeight;
+  const display=getVideoSourceRect(video);
+  const box={x:roi.x*video.clientWidth,y:roi.y*video.clientHeight,w:roi.w*video.clientWidth,h:roi.h*video.clientHeight};
+  const ix=Math.max(box.x,display.left), iy=Math.max(box.y,display.top);
+  const ax=Math.min(box.x+box.w,display.left+display.width), ay=Math.min(box.y+box.h,display.top+display.height);
+  const sx=Math.max(0,Math.round((ix-display.left)/display.width*vw));
+  const sy=Math.max(0,Math.round((iy-display.top)/display.height*vh));
+  const sw=Math.max(1,Math.min(vw-sx,Math.round((ax-ix)/display.width*vw)));
+  const sh=Math.max(1,Math.min(vh-sy,Math.round((ay-iy)/display.height*vh)));
+  const scale=Math.max(4,Math.min(8,3600/Math.max(sw,sh)));
+  const raw=document.createElement('canvas'); raw.width=Math.round(sw*scale); raw.height=Math.round(sh*scale);
+  const rctx=raw.getContext('2d',{willReadFrequently:true});
+  rctx.imageSmoothingEnabled=true; rctx.imageSmoothingQuality='high';
+  rctx.drawImage(video,sx,sy,sw,sh,0,0,raw.width,raw.height);
+  return canvasGrayscaleOnly(raw);
+}
+
+/* captureAndRecognize — 4 estrategias OCR sobre la zona número, voto por mayoría */
+async function captureAndRecognize(){
+  if(liveBusy) return;
+  const video = document.getElementById('liveVideo');
+  if(!video || video.readyState<2 || !video.videoWidth || !video.videoHeight || !ocrWorker){
+    state.scan.liveMessage='📷 Cámara no lista. Espera un instante.'; render(); return;
+  }
+  liveBusy = true; state.scan.liveError = ''; state.scan.suggestions = [];
+  const statusEl = document.getElementById('liveStatusText');
+
+  try{
+    // ── ZONA NÚMERO: 4 estrategias OCR ────────────────────────────────────────
+    // El texto en la carta es: "G PAR en 128/182 ♦"
+    // Estrategia A: binarizado + psm 6 (bloque) sin whitelist — detecta la línea entera
+    // Estrategia B: gris puro + psm 6 sin whitelist — por si binarización arruina contraste
+    // Estrategia C: binarizado + psm 11 (sparse) — recoge números sueltos en cualquier posición
+    // Estrategia D: gris puro + psm 11 — fallback definitivo
+    if(statusEl) statusEl.textContent = '📸 Analizando número (A)…';
+    const numRoi = state.scan.roiNum;
+    const cBin = captureRoiCanvas(video, numRoi);    // binarizado
+    const cRaw = captureRawCanvas(video, numRoi);    // gris puro
+
+    const [textA, textB, textC, textD] = await Promise.all([
+      ocrCanvas(cBin, { psmMode:'6' }),   // A: bin + bloque
+      ocrCanvas(cRaw, { psmMode:'6' }),   // B: raw + bloque
+      ocrCanvas(cBin, { psmMode:'11' }),  // C: bin + sparse
+      ocrCanvas(cRaw, { psmMode:'11' }),  // D: raw + sparse
+    ]);
+
+    // Votar la fracción más repetida entre las 4 estrategias
+    const fracCount = {};
+    for(const t of [textA, textB, textC, textD]){
+      for(const f of extractNumberFraction(t)){
+        const k = f.number+'/'+f.total;
+        fracCount[k] = (fracCount[k]||0)+1;
+      }
+    }
+    let bestFrac='', bestVotes=0;
+    for(const [k,v] of Object.entries(fracCount)){
+      if(v>bestVotes){ bestVotes=v; bestFrac=k; }
+    }
+
+    // Extraer código de set de todos los textos combinados
+    const allNumText = [textA,textB,textC,textD].join('\n');
+    const detectedSetId = extractSetCode(allNumText);
+
+    // ── ZONA CARTA: franja superior (15%) para el nombre ──────────────────────
+    if(statusEl) statusEl.textContent = '📸 Leyendo nombre…';
+    const roi = state.scan.roi;
+    // Solo la franja superior donde está el nombre — evita contaminar con ataques
+    const nameRoi = { x: roi.x, y: roi.y, w: roi.w, h: roi.h * 0.15 };
+    const nameCanvasBin = captureRoiCanvas(video, nameRoi);
+    const nameCanvasRaw = captureRawCanvas(video, nameRoi);
+    // Dos pasadas también para el nombre
+    const [nameA, nameB] = await Promise.all([
+      ocrCanvas(nameCanvasBin, { psmMode:'7' }),
+      ocrCanvas(nameCanvasRaw, { psmMode:'7' }),
+    ]);
+    // Elegir el resultado de nombre más largo (más información)
+    const nameText = nameA.length >= nameB.length ? nameA : nameB;
+
+    // Debug legible
+    const nameLine = nameText.replace(/[^A-Za-z\u00C0-\u00FF' \-]/g,'').trim();
+    state.scan.liveText = [
+      bestFrac ? `Núm: ${bestFrac} (${bestVotes}/4)` : 'Núm: no detectado',
+      detectedSetId ? `Set: ${detectedSetId}` : '',
+      nameLine.length>1 ? `Nombre: ${nameLine.slice(0,25)}` : ''
+    ].filter(Boolean).join(' · ');
+    render();
+
+    // ── Señal de color + pHash visual (paralelos, no bloquean el OCR) ─────────
+    let typeScores = {};
+    let colorHint = '';
+    let phashResults = [];
+    try {
+      const r = state.scan.roi;
+
+      // Color: zona superior-izq donde está el símbolo de tipo
+      const typeRoi = { x: r.x, y: r.y, w: r.w * 0.22, h: r.h * 0.38 };
+      const typeCanvas = captureRoiCanvas(video, typeRoi);
+      const { hue, confidence } = dominantHueFromCanvas(typeCanvas);
+      typeScores = hueToTypeScores(hue, confidence);
+      if(confidence > 0.25){
+        const top = Object.entries(typeScores).sort((a,b)=>b[1]-a[1])[0];
+        if(top){ colorHint = top[0]; state.scan.liveText += ` · Tipo≈${top[0]}`; }
+      }
+
+      // pHash: hash perceptual del ROI carta completo
+      // Solo activo si phash.json está cargado con datos suficientes
+      const fullCardCanvas = captureRoiCanvas(video, r);
+      phashResults = await findByPhash(fullCardCanvas, 5, 22);
+      if(phashResults.length > 0){
+        const best = phashResults[0];
+        state.scan.liveText += ` · 👁 ${best.card.name}(d=${best.distance})`;
+      }
+    } catch(e){ /* señales visuales no críticas */ }
+
+    // ── Resolver ──────────────────────────────────────────────────────────────
+    const fractions = extractNumberFraction(bestFrac || allNumText);
+    let byNumber = [];
+    if(fractions.length){
+      byNumber = await matchByNumberAndSet(fractions, detectedSetId).catch(()=>[]);
+    }
+
+    // Señal de rareza: inferida comparando número OCR con setTotal de cada candidato
+    let rarityHint = 'unknown';
+    if(bestFrac && byNumber.length > 0){
+      const frac = fractions[0];
+      // Todos los candidatos comparten el mismo setTotal si el set está identificado
+      const tier = rarityTierFromNumber(frac.number, byNumber[0].setTotal);
+      if(tier !== 'unknown') rarityHint = tier;
+    }
+
+    // Aplicar bonus de señales (solo si hay más de 1 candidato — si hay 1 es certeza)
+    const signals = { rarityHint, typeScores };
+    if(byNumber.length > 1) byNumber = applySignalBonus(byNumber, signals);
+
+    function smartGuessName(txt){
+      const cands=[];
+      for(const line of txt.split('\n').map(l=>l.trim()).filter(Boolean)){
+        if(/^[\d\s\/\.\-]+$/.test(line)) continue;
+        const cl=line.replace(/[^A-Za-z\u00C0-\u00FF'\- ]/g,'').trim();
+        if(cl.length<2||cl.length>30) continue;
+        if(/^[A-Z]{1,4}\d{1,3}[a-z]?$/.test(cl)) continue;
+        cands.push(cl);
+      }
+      if(!cands.length) return '';
+      cands.sort((a,b)=>(/^[A-Z]/.test(b)?1:0)-(/^[A-Z]/.test(a)?1:0)||b.length-a.length);
+      return cands[0];
+    }
+
+    const guess = smartGuessName(nameText);
+    let byName = [];
+    if(guess.length>=2) byName = await searchCards(guess).catch(()=>[]);
+
+    // Limpiar estado previo
+    state.scan.pendingConfirm = null;
+    state.scan.nameResults = [];
+    state.scan.suggestions = [];
+
+    // ── Decisión ──────────────────────────────────────────────────────────────
+    if(byNumber.length===1){
+      // Carta única por número → pedir confirmación visual antes de añadir
+      state.scan.pendingConfirm = byNumber[0];
+      state.scan.liveMessage = '¿Es esta la carta?';
+      render(); return;
+    }
+
+    if(byNumber.length>1){
+      // Varios por número → refinar con nombre
+      const g = guess.toLowerCase();
+      const refined = g ? byNumber.filter(c=>{
+        const n=c.name.toLowerCase();
+        return n.startsWith(g)||g.startsWith(n)||n.includes(g)||g.includes(n);
+      }) : [];
+      if(refined.length===1){
+        state.scan.pendingConfirm = refined[0];
+        state.scan.liveMessage = '¿Es esta la carta?';
+        render(); return;
+      }
+      // Aún hay ambigüedad → mostrar lista de candidatos
+      state.scan.suggestions = (refined.length ? refined : byNumber).slice(0,6);
+      state.scan.liveMessage = '👆 Varias coincidencias. ¿Cuál es?';
+      render(); return;
+    }
+
+    // Número no detectado → usar pHash primero, luego nombre
+    if(byName.length === 0 && phashResults.length === 0){
+      if(bestFrac){
+        state.scan.liveMessage=`⚠️ Leí "${bestFrac}"${detectedSetId?' ('+detectedSetId+')':''} pero no está en el catálogo.`;
+      } else {
+        state.scan.liveMessage='⚠️ No pude leer el número. Centra el recuadro amarillo sobre "128/182" incluyendo el código antes (PAR/TEF…).';
+      }
+      render(); return;
+    }
+
+    // pHash encontró candidatos visuales → mostrarlos para confirmar
+    if(phashResults.length > 0 && byName.length === 0){
+      if(phashResults[0].distance <= 10){
+        // Distancia muy baja = alta confianza visual
+        state.scan.pendingConfirm = phashResults[0].card;
+        state.scan.liveMessage = `👁 Reconocida visualmente (d=${phashResults[0].distance}). ¿Es esta?`;
+        render(); return;
+      }
+      // Distancia moderada → mostrar las mejores como opciones
+      state.scan.nameResults = phashResults.map(r => r.card).slice(0, 6);
+      state.scan.liveMessage = `👁 Candidatas por imagen — ¿cuál es?`;
+      render(); return;
+    }
+
+    // Solo nombre disponible
+    if(byName.length){
+      state.scan.nameResults = byName.slice(0,9);
+      state.scan.liveMessage = guess
+        ? `No vi el número. Encontré cartas de "${guess}" — ¿es alguna de estas?`
+        : 'No vi el número. Resultados por nombre:';
+      render(); return;
+    }
+
+  }catch(e){
+    console.error(e);
+    state.scan.liveError=e?.message||String(e);
+    state.scan.liveMessage='⚠️ Error. Inténtalo de nuevo.';
+    render();
+  }finally{ liveBusy=false; }
+}
+
+
+function addScannedCard(card, lockMs=3000){
+  addCardToCollection(card);
+  state.scan.recent.unshift(card);
+  state.scan.recent=state.scan.recent.slice(0,6);
+  state.scan.cooldownUntil=Date.now()+lockMs;
+  state.scan.suggestions=[];
+  resetLiveRecognitionStability();
+  render();
+  queueLiveRecognitionFrame(lockMs);
+}
+
+/* ---------- acciones de colección ---------- */
+function addCardToCollection(card){
+  const existing = state.collection.find(c => c.id === card.id);
+  if(existing){
+    existing.qty += 1;
+  }else{
+    state.collection.push({ ...card, qty: 1 });
+  }
+  saveCollection();
+  showToast(`${card.name} añadida al álbum`);
+}
+function changeQty(id, delta){
+  const item = state.collection.find(c => c.id === id);
+  if(!item) return;
+  item.qty += delta;
+  if(item.qty <= 0){
+    state.collection = state.collection.filter(c => c.id !== id);
+  }
+  saveCollection();
+  render();
+}
+function removeCard(id){
+  state.collection = state.collection.filter(c => c.id !== id);
+  saveCollection();
+  render();
+}
+
+/* ---------- toast ---------- */
+let toastTimer;
+function showToast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.classList.remove('show'), 2200);
+}
+
+/* ---------- render helpers ---------- */
+function priceLine(card){
+  const eur = card.cardmarketEUR != null ? `<span class="p-eur">€${card.cardmarketEUR.toFixed(2)}</span>` : `<span style="color:var(--muted)">Sin precio Cardmarket</span>`;
+  const usd = card.tcgplayerUSD != null ? `<span class="p-usd">$${card.tcgplayerUSD.toFixed(2)}</span>` : `<span style="color:var(--muted)">Sin precio TCGplayer</span>`;
+  return `<div class="prices">${eur}${usd}</div>`;
+}
+
+function resultCardHTML(card, idx){
+  return `
+    <div class="result-card" data-add-idx="${idx}">
+      <img src="${card.image}" alt="${card.name}" loading="lazy">
+      <div class="rname">${card.name}</div>
+      <div class="rset">${card.setName}${card.number ? ' · #' + card.number : ''}</div>
+    </div>`;
+}
+
+/* ---------- render por pestaña ---------- */
+function renderScanTab(){
+  const modeRow = `<div class="mode-row">
+    <div class="chip ${state.scan.mode==='live'?'active':''}" data-mode="live">Cámara en vivo</div>
+    <div class="chip ${state.scan.mode==='photo'?'active':''}" data-mode="photo">Foto individual</div>
+  </div>`;
+  if(state.scan.mode === 'live') renderScanTabLive(modeRow);
+  else renderScanTabPhoto(modeRow);
+}
+
+function renderScanTabLive(modeRow){
+  const s=state.scan;
+  let html=modeRow;
+  html+=`<div class="card-box video-box">`;
+  if(s.liveActive){
+    const adjusting = s.livePhase!=='scanning';
+    html+=`<div class="video-wrap">
+      <video id="liveVideo" playsinline muted autoplay></video>
+      <div id="roiCard" class="roi-card"></div>
+      <div id="roiNum" class="roi-num"><div id="roiNumResize" class="roi-num-resize"></div></div>
+      ${s.suggestions.length?`<div class="suggest-banner"><div class="suggest-label">👆 ¿Cuál es la carta?</div><div class="suggest-list">${s.suggestions.map((c,i)=>`<div class="suggest-item" data-suggest-idx="${i}"><img src="${c.image}" loading="lazy"><span>${escapeHtml(c.name)}<small>${escapeHtml(c.setName)} · #${escapeHtml(c.number||'')}</small></span></div>`).join('')}</div></div>`:''}
+    </div>
+    <div class="live-status"><span class="dot"></span><span id="liveStatusText">${escapeHtml(s.liveMessage||'Preparando…')}</span></div>
+    ${s.liveText?`<div class="ocr-debug">${escapeHtml(s.liveText)}</div>`:''}
+    ${s.liveError?`<div class="ocr-error" style="font-size:11px;color:#f66;padding:3px 4px">${escapeHtml(s.liveError)}</div>`:''}
+
+    ${s.pendingConfirm ? (()=>{
+      const c = s.pendingConfirm;
+      const price = c.eur ? `€${c.eur.toFixed(2)}` : (c.usd ? `$${c.usd.toFixed(2)}` : '');
+      return `<div class="confirm-banner">
+        <img src="${c.image}" alt="${escapeHtml(c.name)}">
+        <div class="confirm-info">
+          <strong>${escapeHtml(c.name)}</strong>
+          <span>${escapeHtml(c.setName)} · #${escapeHtml(c.number||'')} / ${c.setTotal}</span>
+          ${price ? `<div class="confirm-price">${price}</div>` : ''}
+        </div>
+        <div class="confirm-actions">
+          <button class="btn btn-primary" id="confirmYesBtn">✅ Sí, esta</button>
+          <button class="btn btn-ghost" id="confirmNoBtn">❌ No es esta</button>
+        </div>
+      </div>`;
+    })() : ''}
+
+    ${s.nameResults.length ? `<div class="name-results-header">
+        Cartas de "${escapeHtml(s.nameResults[0]?.name?.split(' ')[0]||'')}" — toca la correcta
+        <span>${s.nameResults.length} versiones</span>
+      </div>
+      <div class="name-results-grid">
+        ${s.nameResults.map((c,i)=>`
+          <div class="name-result-item" data-name-idx="${i}">
+            <img src="${c.image}" loading="lazy" alt="${escapeHtml(c.name)}">
+            <div class="nri-name">${escapeHtml(c.name)}</div>
+            <div class="nri-set">${escapeHtml(c.setName)}<br>#${escapeHtml(c.number||'')}</div>
+          </div>`).join('')}
+      </div>` : ''}`;    if(adjusting){
+      html+=`<div class="camera-adjust">
+        <div class="roi-legend">
+          <span class="roi-legend-card">■ Azul</span> = carta entera &nbsp;·&nbsp;
+          <span class="roi-legend-num">■ Amarillo</span> = número de carta
+        </div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:8px">
+          El número <strong style="color:var(--text)">"128/182"</strong> está impreso en la <strong style="color:var(--accent)">esquina inferior izquierda</strong> de la carta física, justo encima del copyright. Mueve el recuadro amarillo hasta ahí y hazlo pequeño para que solo cubra esos dígitos.
+        </div>
+        <div class="zoom-row" style="margin-top:8px">
+          <button class="btn btn-ghost zoom-btn" id="zoomOutBtn">−</button>
+          <input id="zoomRange" class="zoom-range" type="range" min="${s.zoomMin}" max="${s.zoomMax}" step="${s.zoomStep}" value="${s.zoom}">
+          <button class="btn btn-ghost zoom-btn" id="zoomInBtn">+</button>
+          <span id="zoomValue" class="zoom-value">${s.zoom.toFixed(1)}×</span>
+        </div>
+        <div class="adjust-actions">
+          <button class="btn btn-ghost" id="resetZoomBtn">Restablecer zoom</button>
+          <button class="btn btn-primary" id="beginScanBtn">📸 Capturar y reconocer</button>
+        </div>
+      </div>`;
+    } else {
+      html+=`<div class="capture-actions">
+        <button class="btn btn-primary" id="captureAgainBtn">📸 Capturar de nuevo</button>
+        <button class="btn btn-ghost" id="adjustAgainBtn">🎯 Ajustar zona</button>
+        <button class="btn btn-ghost" id="stopLiveBtn">Detener cámara</button>
+      </div>`;
+    }
+  } else {
+    html+=`<p class="hint" style="margin-top:0">Coloca el recuadro <strong>azul</strong> sobre la carta entera y el <strong>amarillo</strong> justo encima del número. Pulsa Capturar cuando estés listo.</p>
+    <button class="btn btn-primary" id="startLiveBtn">Iniciar cámara</button>`;
+  }
+  html+=`</div>`;
+  if(s.recent.length){
+    html+=`<h2 class="section-title">Añadidas en esta sesión</h2>
+    <div class="result-grid">${s.recent.map(c=>`<div class="result-card" style="cursor:default"><img src="${c.image}" loading="lazy"><div class="rname">${escapeHtml(c.name)}</div><div class="rset">${escapeHtml(c.setName)}</div></div>`).join('')}</div>`;
+  }
+  html+=`<p class="hint">💡 <strong>El número está en la esquina inferior izquierda</strong> de la carta física (ej: "PAR en 128/182"). Acerca la cámara y pon el recuadro amarillo justo ahí. Cuanto más ajustado, mejor.</p>`;
+  document.getElementById('main').innerHTML=html;
+  if(s.liveActive){
+    requestAnimationFrame(()=>{
+      const v=document.getElementById('liveVideo');
+      if(v&&mediaStream){v.srcObject=mediaStream;v.play().catch(()=>{});}
+      updateCameraZoomUI(); updateRoiUI(); attachRoiDrag();
+    });
+  }
+}
+
+function renderScanTabPhoto(modeRow){
+  const s = state.scan.photo;
+  let html = modeRow;
+  html += `<div class="card-box">
+    <h2 class="section-title" style="margin-top:0">Fotografía la carta</h2>
+    <label class="btn btn-primary" for="fileInput">Tomar foto o elegir imagen</label>
+    <input type="file" id="fileInput" accept="image/*" capture="environment">
+    <p class="hint">El reconocimiento de texto no es perfecto: revisa el nombre detectado antes de buscar, o corrígelo a mano.</p>
+  </div>`;
+
+  if(s.image){
+    html += `<h2 class="section-title">Vista previa</h2>
+    <div class="card-box">
+      <div class="preview-wrap">
+        <img src="${s.image}" alt="Carta escaneada">
+        <div style="flex:1">
+          <div class="status-line">
+            ${s.status === 'ocr' ? '<span class="spinner"></span> Leyendo texto de la carta…' : ''}
+            ${s.status === 'searching' ? '<span class="spinner"></span> Buscando coincidencias…' : ''}
+            ${s.status === 'done' ? 'Confirma o corrige el nombre y busca de nuevo si hace falta.' : ''}
+            ${s.status === 'error' ? 'No se pudo leer la imagen. Escribe el nombre manualmente.' : ''}
+          </div>
+        </div>
+      </div>
+      <input type="text" id="guessInput" placeholder="Nombre de la carta" value="${s.guess.replace(/"/g,'&quot;')}">
+      <div style="height:10px"></div>
+      <button class="btn btn-ghost" id="scanSearchBtn" style="width:100%">Buscar esta carta</button>
+    </div>`;
+  }
+
+  if(s.results.length){
+    html += `<h2 class="section-title">Elige la carta correcta (${s.results.length})</h2>
+    <div class="result-grid" id="scanResults">
+      ${s.results.map((c,i)=>resultCardHTML(c,i)).join('')}
+    </div>`;
+  } else if(s.status === 'done'){
+    html += `<p class="hint">Sin coincidencias. Prueba a escribir el nombre exacto.</p>`;
+  }
+
+  document.getElementById('main').innerHTML = html;
+}
+
+function renderSearchTab(){
+  const s = state.search;
+  let html = `<div class="card-box">
+    <h2 class="section-title" style="margin-top:0">Busca por nombre</h2>
+    <input type="text" id="searchInput" placeholder="Ej. Pikachu, Charizard…" value="${s.query.replace(/"/g,'&quot;')}">
+    <div style="height:10px"></div>
+    <button class="btn btn-primary" id="searchBtn">Buscar</button>
+  </div>`;
+
+  if(s.status === 'searching'){
+    html += `<p class="hint"><span class="spinner"></span> Buscando…</p>`;
+  }else if(s.status === 'error'){
+    html += `<p class="hint">Hubo un problema al consultar la API. Inténtalo de nuevo.</p>`;
+  }else if(s.results.length){
+    html += `<h2 class="section-title">Resultados (${s.results.length})</h2>
+    <div class="result-grid" id="searchResults">
+      ${s.results.map((c,i)=>resultCardHTML(c,i)).join('')}
+    </div>`;
+  }else if(s.status === 'done'){
+    html += `<p class="hint">Sin resultados para "${s.query}".</p>`;
+  }
+
+  document.getElementById('main').innerHTML = html;
+}
+
+function renderCollectionTab(){
+  const col = state.collection;
+  let html = `<div class="sort-row">
+    <div class="chip ${state.sortMode==='expansion'?'active':''}" data-sort="expansion">Por expansión</div>
+    <div class="chip ${state.sortMode==='price-desc'?'active':''}" data-sort="price-desc">Precio ↓</div>
+    <div class="chip ${state.sortMode==='price-asc'?'active':''}" data-sort="price-asc">Precio ↑</div>
+  </div>`;
+
+  html += `<div style="display:flex; gap:16px; margin-bottom:16px;">
+    <span id="exportCollectionBtn" style="font-size:12px; color:var(--muted); text-decoration:underline; cursor:pointer;">Exportar colección</span>
+    <label for="importCollectionInput" style="font-size:12px; color:var(--muted); text-decoration:underline; cursor:pointer;">Importar colección</label>
+    <input type="file" id="importCollectionInput" accept="application/json" style="display:none">
+  </div>`;
+
+  if(col.length === 0){
+    html += `<div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9.5h16"/></svg>
+      <p>Tu álbum está vacío.<br>Escanea o busca una carta para empezar.</p>
+    </div>`;
+    document.getElementById('main').innerHTML = html;
+    return;
+  }
+
+  const priceOf = (c) => c.cardmarketEUR != null ? c.cardmarketEUR : (c.tcgplayerUSD != null ? c.tcgplayerUSD : -1);
+
+  if(state.sortMode === 'expansion'){
+    const groups = {};
+    col.forEach(c=>{
+      if(!groups[c.setName]) groups[c.setName] = { order: setOrderFor(c.setId, c.setName), items: [] };
+      groups[c.setName].items.push(c);
+    });
+    const groupNames = Object.keys(groups).sort((a,b)=> groups[b].order - groups[a].order);
+    groupNames.forEach(name=>{
+      const items = groups[name].items.sort((a,b)=> priceOf(b) - priceOf(a));
+      const subtotalEUR = items.reduce((s,c)=> s + (c.cardmarketEUR||0)*c.qty, 0);
+      html += `<div class="group-header">
+        <div class="gname">${name}</div>
+        <div class="gcount">${items.length} ${items.length===1?'carta':'cartas'} · €${subtotalEUR.toFixed(2)}</div>
+      </div>`;
+      items.forEach(c=> html += rowHTML(c));
+    });
+  }else{
+    const sorted = [...col].sort((a,b)=> state.sortMode==='price-desc' ? priceOf(b)-priceOf(a) : priceOf(a)-priceOf(b));
+    sorted.forEach(c=> html += rowHTML(c));
+  }
+
+  document.getElementById('main').innerHTML = html;
+}
+
+function rowHTML(c){
+  return `<div class="row">
+    <img src="${c.image}" alt="${c.name}">
+    <div class="info">
+      <div class="rname">${c.name}</div>
+      <div class="rmeta">${c.setName}${c.number ? ' · #' + c.number : ''}</div>
+      ${priceLine(c)}
+    </div>
+    <div class="qty">
+      <button data-qty="-1" data-id="${c.id}">−</button>
+      <span class="n">${c.qty}</span>
+      <button data-qty="1" data-id="${c.id}">+</button>
+    </div>
+    <button class="del" data-remove="${c.id}">✕</button>
+  </div>`;
+}
+
+/* ---------- pestaña de expansiones ---------- */
+function renderExpansionTab(){
+  if(state.expansion.view === 'cards' && state.expansion.selectedSet) renderExpansionCards();
+  else renderExpansionSets();
+}
+
+function renderExpansionSets(){
+  const e = state.expansion;
+  let html = `<div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px;">
+    <h2 class="section-title" style="margin:0">Elige una expansión</h2>
+    ${e.sets ? `<span id="refreshSets" style="font-size:11.5px; color:var(--muted); text-decoration:underline; cursor:pointer;">Actualizar catálogo</span>` : ''}
+  </div>`;
+
+  if(e.setsStatus === 'loading' || e.sets === null){
+    html += `<p class="hint"><span class="spinner"></span> Cargando expansiones…</p>`;
+    document.getElementById('main').innerHTML = html;
+    return;
+  }
+  if(e.setsStatus === 'error'){
+    html += `<p class="hint">No se pudieron cargar las expansiones.${e.setsError ? ' (' + e.setsError + ')' : ''}</p>
+      <button class="btn btn-ghost" id="retryLoadSets" style="width:100%">Reintentar</button>`;
+    document.getElementById('main').innerHTML = html;
+    return;
+  }
+
+  html += `<div class="set-list">` + e.sets.map(s=>{
+    const owned = ownedCountForSet(s.id, s.name);
+    const total = s.total || 0;
+    const pct = total ? Math.min(100, Math.round((owned/total)*100)) : 0;
+    return `<div class="set-row" data-set-id="${s.id}">
+      <img class="set-logo" src="${s.symbol || ''}" alt="${s.name}" loading="lazy" onerror="this.style.visibility='hidden'">
+      <div class="set-info">
+        <div class="set-name">${s.name}</div>
+        <div class="set-meta">${s.id}</div>
+        <div class="set-progress-bar"><div class="fill" style="width:${pct}%"></div></div>
+      </div>
+      <div class="set-count">${owned}/${total || '?'}</div>
+    </div>`;
+  }).join('') + `</div>`;
+
+  document.getElementById('main').innerHTML = html;
+}
+
+function renderExpansionCards(){
+  const e = state.expansion;
+  const set = e.selectedSet;
+  const owned = ownedCountForSet(set.id, set.name);
+  const total = set.total || e.cards.length;
+
+  let html = `<div class="back-row" id="expBackBtn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    <span>Expansiones</span>
+  </div>`;
+
+  html += `<div class="set-header">
+    <img src="${set.symbol || ''}" alt="${set.name}" onerror="this.style.visibility='hidden'">
+    <div>
+      <div class="shname">${set.name}</div>
+      <div class="shcount">${owned} de ${total} cartas</div>
+    </div>
+  </div>`;
+
+  html += `<div class="exp-filter-row">
+    <div class="chip ${e.filter==='all'?'active':''}" data-expfilter="all">Todas</div>
+    <div class="chip ${e.filter==='owned'?'active':''}" data-expfilter="owned">Las tengo</div>
+    <div class="chip ${e.filter==='missing'?'active':''}" data-expfilter="missing">Me faltan</div>
+  </div>`;
+
+  if(e.cardsStatus === 'loading'){
+    html += `<p class="hint"><span class="spinner"></span> Cargando cartas de la expansión…</p>`;
+  }else if(e.cardsStatus === 'error'){
+    html += `<p class="hint">No se pudieron cargar las cartas de esta expansión.${e.cardsError ? ' (' + e.cardsError + ')' : ''}</p>
+      <button class="btn btn-ghost" id="retryLoadCards" style="width:100%">Reintentar</button>`;
+  }else{
+    const ownedIds = new Set(state.collection.map(c=>c.id));
+    let cards = e.cards;
+    if(e.filter === 'owned') cards = cards.filter(c => ownedIds.has(c.id));
+    else if(e.filter === 'missing') cards = cards.filter(c => !ownedIds.has(c.id));
+
+    if(cards.length === 0){
+      html += `<p class="hint">No hay cartas que mostrar con este filtro.</p>`;
+    }else{
+      html += `<div class="checklist-grid">` + cards.map(c=>{
+        const isOwned = ownedIds.has(c.id);
+        const qty = qtyForCardId(c.id);
+        return `<div class="check-card ${isOwned?'owned':'unowned'}" data-card-id="${c.id}">
+          <img src="${c.image}" alt="${c.name}" loading="lazy">
+          <div class="cc-num">#${c.number}</div>
+          ${isOwned ? `<button class="cc-minus" data-minus-id="${c.id}" title="Quitar una copia">−</button>` : ''}
+          ${isOwned && qty > 1 ? `<div class="cc-qty">x${qty}</div>` : ''}
+        </div>`;
+      }).join('') + `</div>
+      <p class="hint">Toca una carta para añadirla al álbum (o sumar otra copia). Para quitarla o corregir la cantidad, usa la pestaña Colección.</p>`;
+    }
+  }
+
+  document.getElementById('main').innerHTML = html;
+}
+
+function updateHeader(){
+  const total = state.collection.reduce((n,c)=> n + c.qty, 0);
+  document.getElementById('collectionCount').textContent = `${total} ${total===1?'carta':'cartas'}`;
+  const totalEUR = state.collection.reduce((s,c)=> s + (c.cardmarketEUR||0)*c.qty, 0);
+  const totalUSD = state.collection.reduce((s,c)=> s + (c.tcgplayerUSD||0)*c.qty, 0);
+  document.getElementById('totalEUR').textContent = `€${totalEUR.toFixed(2)}`;
+  document.getElementById('totalUSD').textContent = `$${totalUSD.toFixed(2)}`;
+}
+
+function render(){
+  document.querySelectorAll('nav.tabs button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.tab === state.tab);
+  });
+  if(state.tab === 'scan') renderScanTab();
+  else if(state.tab === 'search') renderSearchTab();
+  else if(state.tab === 'expansion') renderExpansionTab();
+  else renderCollectionTab();
+  updateHeader();
+  attachDynamicListeners();
+  if(state.tab === 'scan' && state.scan.mode === 'live' && state.scan.liveActive){
+    const video = document.getElementById('liveVideo');
+    if(video && video.srcObject !== mediaStream){
+      video.srcObject = mediaStream;
+      video.play().catch(()=>{});
+    }
+  }
+}
+
+/* ---------- listeners dinámicos (regenerados en cada render) ---------- */
+function attachDynamicListeners(){
+  document.querySelectorAll('.chip[data-mode]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      if(state.scan.mode === el.dataset.mode) return;
+      if(state.scan.liveActive) stopLiveScan();
+      state.scan.mode = el.dataset.mode;
+      render();
+    });
+  });
+  const startLiveBtn = document.getElementById('startLiveBtn');
+  if(startLiveBtn){
+    startLiveBtn.addEventListener('click', ()=> startLiveScan());
+  }
+  const beginScanBtn = document.getElementById('beginScanBtn');
+  if(beginScanBtn){
+    beginScanBtn.addEventListener('click', ()=> beginLiveRecognition());
+  }
+  const captureAgainBtn = document.getElementById('captureAgainBtn');
+  if(captureAgainBtn){
+    captureAgainBtn.addEventListener('click', ()=> captureAndRecognize());
+  }
+  const adjustAgainBtn = document.getElementById('adjustAgainBtn');
+  if(adjustAgainBtn){
+    adjustAgainBtn.addEventListener('click', ()=> resetToAdjust());
+  }
+  const stopLiveBtn = document.getElementById('stopLiveBtn');
+  if(stopLiveBtn){
+    stopLiveBtn.addEventListener('click', ()=>{ stopLiveScan(); render(); });
+  }
+  const zoomRange = document.getElementById('zoomRange');
+  if(zoomRange){
+    zoomRange.addEventListener('input', ()=> applyCameraZoom(zoomRange.value));
+  }
+  const zoomOutBtn = document.getElementById('zoomOutBtn');
+  if(zoomOutBtn){
+    zoomOutBtn.addEventListener('click', ()=> applyCameraZoom((state.scan.zoom || 1) - (state.scan.zoomStep || 0.1)));
+  }
+  const zoomInBtn = document.getElementById('zoomInBtn');
+  if(zoomInBtn){
+    zoomInBtn.addEventListener('click', ()=> applyCameraZoom((state.scan.zoom || 1) + (state.scan.zoomStep || 0.1)));
+  }
+  const resetZoomBtn = document.getElementById('resetZoomBtn');
+  if(resetZoomBtn){
+    resetZoomBtn.addEventListener('click', ()=> applyCameraZoom(state.scan.zoomMin || 1));
+  }
+  document.querySelectorAll('[data-suggest-idx]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const card = state.scan.suggestions[parseInt(el.dataset.suggestIdx,10)];
+      if(!card) return;
+      addScannedCard(card, 6000);
+    });
+  });
+
+  const confirmYesBtn = document.getElementById('confirmYesBtn');
+  if(confirmYesBtn){
+    confirmYesBtn.addEventListener('click', ()=>{
+      if(state.scan.pendingConfirm){
+        addScannedCard(state.scan.pendingConfirm, 3000);
+        state.scan.pendingConfirm = null;
+      }
+    });
+  }
+  const confirmNoBtn = document.getElementById('confirmNoBtn');
+  if(confirmNoBtn){
+    confirmNoBtn.addEventListener('click', ()=>{
+      state.scan.pendingConfirm = null;
+      state.scan.liveMessage = '↩️ De acuerdo. Ajusta los recuadros e inténtalo de nuevo.';
+      render();
+    });
+  }
+
+  document.querySelectorAll('[data-name-idx]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const card = state.scan.nameResults[parseInt(el.dataset.nameIdx,10)];
+      if(!card) return;
+      addScannedCard(card, 6000);
+    });
+  });
+
+  const fileInput = document.getElementById('fileInput');
+  if(fileInput){
+    fileInput.addEventListener('change', onFileSelected);
+  }
+  const guessInput = document.getElementById('guessInput');
+  if(guessInput){
+    guessInput.addEventListener('input', (e)=>{ state.scan.photo.guess = e.target.value; });
+  }
+  const scanSearchBtn = document.getElementById('scanSearchBtn');
+  if(scanSearchBtn){
+    scanSearchBtn.addEventListener('click', ()=> doScanSearch());
+  }
+  const scanResults = document.getElementById('scanResults');
+  if(scanResults){
+    scanResults.querySelectorAll('[data-add-idx]').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        const card = state.scan.photo.results[parseInt(el.dataset.addIdx,10)];
+        addCardToCollection(card);
+      });
+    });
+  }
+  const searchInput = document.getElementById('searchInput');
+  if(searchInput){
+    searchInput.addEventListener('input', (e)=>{ state.search.query = e.target.value; });
+    searchInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') doSearch(); });
+  }
+  const searchBtn = document.getElementById('searchBtn');
+  if(searchBtn){
+    searchBtn.addEventListener('click', ()=> doSearch());
+  }
+  const searchResults = document.getElementById('searchResults');
+  if(searchResults){
+    searchResults.querySelectorAll('[data-add-idx]').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        const card = state.search.results[parseInt(el.dataset.addIdx,10)];
+        addCardToCollection(card);
+      });
+    });
+  }
+  document.querySelectorAll('.chip[data-sort]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.sortMode = el.dataset.sort; render(); });
+  });
+  document.querySelectorAll('[data-qty]').forEach(el=>{
+    el.addEventListener('click', ()=> changeQty(el.dataset.id, parseInt(el.dataset.qty,10)));
+  });
+  document.querySelectorAll('[data-remove]').forEach(el=>{
+    el.addEventListener('click', ()=> removeCard(el.dataset.remove));
+  });
+
+  document.querySelectorAll('.set-row[data-set-id]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const set = state.expansion.sets.find(s => s.id === el.dataset.setId);
+      if(set) openSet(set);
+    });
+  });
+  const retryLoadSets = document.getElementById('retryLoadSets');
+  if(retryLoadSets){
+    retryLoadSets.addEventListener('click', ()=> loadSets());
+  }
+  const refreshSets = document.getElementById('refreshSets');
+  if(refreshSets){
+    refreshSets.addEventListener('click', ()=> refreshSetsCatalog());
+  }
+  const expBackBtn = document.getElementById('expBackBtn');
+  if(expBackBtn){
+    expBackBtn.addEventListener('click', ()=>{
+      state.expansion.view = 'sets';
+      state.expansion.selectedSet = null;
+      render();
+    });
+  }
+  const retryLoadCards = document.getElementById('retryLoadCards');
+  if(retryLoadCards){
+    retryLoadCards.addEventListener('click', ()=> openSet(state.expansion.selectedSet));
+  }
+  document.querySelectorAll('.chip[data-expfilter]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.expansion.filter = el.dataset.expfilter; render(); });
+  });
+  document.querySelectorAll('.check-card[data-card-id]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const card = state.expansion.cards.find(c => c.id === el.dataset.cardId);
+      if(!card) return;
+      addCardToCollection(card);
+      render();
+    });
+  });
+  document.querySelectorAll('[data-minus-id]').forEach(el=>{
+    el.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      changeQty(el.dataset.minusId, -1);
+    });
+  });
+  const exportBtn = document.getElementById('exportCollectionBtn');
+  if(exportBtn){
+    exportBtn.addEventListener('click', exportCollection);
+  }
+  const importInput = document.getElementById('importCollectionInput');
+  if(importInput){
+    importInput.addEventListener('change', importCollection);
+  }
+}
+
+/* ---------- flujos async ---------- */
+async function onFileSelected(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const dataUrl = await resizeImage(file);
+    state.scan.photo = { image: dataUrl, status: 'ocr', guess: '', results: [] };
+    render();
+    const text = await runOCR(dataUrl);
+    const guess = guessNameFromText(text);
+    state.scan.photo.guess = guess;
+    state.scan.photo.status = 'searching';
+    render();
+
+    const fractions = extractNumberFraction(text);
+    const byNumber = await matchByNumberFraction(fractions).catch(()=>[]);
+    const byName = guess ? await searchCards(guess).catch(()=>[]) : [];
+
+    // el número manda si es concluyente; si no, se combina con el nombre
+    let results = byNumber.length ? byNumber : byName;
+    if(byNumber.length > 1 && byName.length){
+      const ids = new Set(byName.map(c=>c.id));
+      const refined = byNumber.filter(c => ids.has(c.id));
+      if(refined.length) results = refined;
+    }
+    state.scan.photo.results = results;
+    state.scan.photo.status = 'done';
+    render();
+  }catch(err){
+    console.error(err);
+    state.scan.photo.status = 'error';
+    render();
+  }
+}
+
+async function doScanSearch(){
+  const name = state.scan.photo.guess;
+  if(!name.trim()) return;
+  state.scan.photo.status = 'searching';
+  state.scan.photo.results = [];
+  render();
+  try{
+    state.scan.photo.results = await searchCards(name);
+  }catch(err){
+    console.error(err);
+  }
+  state.scan.photo.status = 'done';
+  render();
+}
+
+async function doSearch(){
+  const q = state.search.query;
+  if(!q.trim()) return;
+  state.search.status = 'searching';
+  state.search.results = [];
+  render();
+  try{
+    state.search.results = await searchCards(q);
+  }catch(err){
+    console.error(err);
+    state.search.status = 'error';
+    render();
+    return;
+  }
+  state.search.status = 'done';
+  render();
+}
+
+async function refreshSetsCatalog(){
+  state.expansion.sets = null;
+  await loadSets();
+}
+
+async function loadSets(){
+  state.expansion.setsStatus = 'loading';
+  state.expansion.setsError = '';
+  render();
+  try{
+    const sets = await fetchAllSets();
+    sets.sort((a,b)=> (b.order||0) - (a.order||0));
+    state.expansion.sets = sets;
+    state.expansion.setsStatus = 'done';
+  }catch(err){
+    console.error(err);
+    state.expansion.setsError = err.message || 'Error desconocido';
+    state.expansion.setsStatus = 'error';
+  }
+  render();
+}
+
+async function openSet(set){
+  state.expansion.selectedSet = set;
+  state.expansion.view = 'cards';
+  state.expansion.filter = 'all';
+  state.expansion.cardsError = '';
+  if(state.expansion.cardsCache[set.id]){
+    state.expansion.cards = state.expansion.cardsCache[set.id];
+    state.expansion.cardsStatus = 'done';
+    render();
+    return;
+  }
+  state.expansion.cards = [];
+  state.expansion.cardsStatus = 'loading';
+  render();
+  try{
+    const cards = await fetchSetCards(set);
+    cards.sort(naturalCardSort);
+    state.expansion.cardsCache[set.id] = cards;
+    state.expansion.cards = cards;
+    state.expansion.cardsStatus = 'done';
+  }catch(err){
+    console.error(err);
+    state.expansion.cardsError = err.message || 'Error desconocido';
+    state.expansion.cardsStatus = 'error';
+  }
+  render();
+}
+
+/* ---------- navegación de pestañas ---------- */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    if(btn.dataset.tab !== 'scan' && state.scan.liveActive) stopLiveScan();
+    state.tab = btn.dataset.tab;
+    render();
+    if(state.tab === 'expansion' && state.expansion.sets === null && state.expansion.setsStatus === 'idle'){
+      loadSets();
+    }
+  });
+});
+
+/* ---------- init ---------- */
+(async function init(){
+  await loadOptionalScript('./config.local.js');
+  await setupAuth();
+  await loadCollection();
+  render();
+  ensureGlobalIndex().catch(err=> console.error('No se pudo precargar el índice de cartas', err));
+  ensurePhash().catch(()=>{});  // precargar phash.json en segundo plano (falla silenciosamente si no existe)
+  if(state.expansion.sets === null && state.expansion.setsStatus === 'idle'){
+    loadSets();
+  }
+})();
+</script>
+</body>
+</html>
