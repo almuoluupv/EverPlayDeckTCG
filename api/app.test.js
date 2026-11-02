@@ -70,7 +70,9 @@ test('la colección exige el origen de Pages y la sesión', async () => {
       token: 'buena',
     });
     assert.equal(empty.status, 200);
-    assert.deepEqual(empty.json, { cards: [] });
+    assert.deepEqual(empty.json.cards, []);
+    assert.equal(empty.json.isAdmin, false);
+    assert.equal(empty.json.plan.id, 'gratis');
     assert.equal(empty.headers.get('access-control-allow-origin'), 'http://127.0.0.1:43123');
 
     const saved = await request(server, {
@@ -91,7 +93,8 @@ test('la colección exige el origen de Pages y la sesión', async () => {
       token: 'otra',
     });
     assert.equal(other.status, 200);
-    assert.deepEqual(other.json, { cards: [] });
+    assert.deepEqual(other.json.cards, []);
+    assert.equal(other.json.isAdmin, false);
 
     const otherSave = await request(server, {
       method: 'PUT',

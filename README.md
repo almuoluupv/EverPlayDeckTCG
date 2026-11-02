@@ -30,7 +30,7 @@ Escucha en `0.0.0.0` y en el puerto de `PORT` (en local, 8787). `GET /` responde
 
 | Dónde | Qué pegar |
 | --- | --- |
-| Render, variables de entorno | `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `MONGODB_URI`, `PAGES_ORIGIN` |
+| Render, variables de entorno | `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `MONGODB_URI`, `PAGES_ORIGIN`, `ADMIN_EMAIL` |
 | `config.js` (sí se sube, es la web pública) | La misma clave **publicable** de Clerk y la URL pública de Render, sin barra final |
 | Clerk, orígenes permitidos | El origen de GitHub Pages, el mismo valor que `PAGES_ORIGIN` |
 
@@ -53,7 +53,10 @@ No hace falta una API key de Render para este repo.
    - `CLERK_PUBLISHABLE_KEY`
    - `MONGODB_URI`
    - `PAGES_ORIGIN`
+   - `ADMIN_EMAIL` (el correo de la cuenta de Clerk que administra; si se deja vacío, el primer usuario que entre queda como admin)
 4. Cuando el deploy termine, copia la URL `https://….onrender.com` en `config.js` como `apiBase`, y la clave publicable como `clerkPublishableKey`. Haz commit y push. Pages se actualiza y el botón **Entrar** habla con Render.
+
+La administración no es una pestaña del álbum. Quien sea admin ve el enlace **Administración**, que abre `https://almuoluupv.github.io/EverPlayDeckTCG/admin/`. Cualquier otra cuenta recibe 403 de la API y no ve ese enlace. Hay tres planes (Gratis, Colección y Tienda). El admin fija cuántas cartas —la suma de copias— puede guardar cada plan, y asigna un plan a cada usuario. Al pasar del máximo, la API rechaza el guardado. El navegador envía avisos de error a `POST /api/client-errors` sin fotos de cartas, sin tokens y sin claves.
 5. En el panel de Clerk, añade el origen de Pages a los orígenes permitidos.
 
 El plan gratuito de Render se duerme tras unos 15 minutos sin visitas y tarda alrededor de un minuto en volver. Si esa primera llamada falla, el álbum de ese momento se queda en el dispositivo.

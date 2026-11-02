@@ -69,6 +69,7 @@
   .totals .val.usd{ color: var(--teal); }
   .auth-slot{ margin-top: 8px; min-height: 22px; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
   .auth-note{ color: var(--muted); font-size: 11.5px; line-height: 1.3; }
+  a.admin-link{ color: var(--teal); font-size: 11.5px; }
   .auth-btn{
     background: transparent;
     color: var(--accent);
@@ -542,6 +543,8 @@ const STORAGE_KEY = 'pokemon_album_collection_v1';
 let authListenerReady = false;
 let clerkFailed = false;
 let userButtonMounted = false;
+let accountAccess = { isAdmin: false, plan: null, maxCards: 0 };
+let lastClientReport = 0;
 
 function accountCacheKey(userId){
   return STORAGE_KEY + ':account:' + userId;
@@ -586,15 +589,88 @@ async function sessionToken(){
   return (await session.getToken()) || '';
 }
 
-async function fetchRemoteCards(){
+function clearAccountAccess(){
+  accountAccess = { isAdmin: false, plan: null, maxCards: 0 };
+  const link = document.getElementById('adminLink');
+  if(link) link.remove();
+}
+
+function paintAdminLink(){
+  const old = document.getElementById('adminLink');
+  if(!accountAccess.isAdmin || !remoteAlbumEnabled()){
+    if(old) old.remove();
+    return;
+  }
+  const slot = document.getElementById('authSlot');
+  if(!slot) return;
+  const link = old || document.createElement('a');
+  link.id = 'adminLink';
+  link.className = 'admin-link';
+  link.textContent = 'Administración';
+  let href = 'admin/';
+  try{
+    const here = new URL(window.location.href);
+    let path = here.pathname.endsWith('/') ? here.pathname : here.pathname + '/';
+    here.pathname = path + 'admin/';
+    here.search = '';
+    here.hash = '';
+    href = here.href;
+    if(window.Clerk && typeof window.Clerk.buildUrlWithAuth === 'function'){
+      href = window.Clerk.buildUrlWithAuth(href);
+    }
+  }catch(e){}
+  link.href = href;
+  if(!old) slot.appendChild(link);
+}
+
+function albumCardCount(list){
+  return (list || []).reduce((total, card) => total + (Number(card && card.qty) || 0), 0);
+}
+
+function planLimit(){
+  if(!remoteAlbumEnabled()) return 0;
+  const max = Number(accountAccess.maxCards);
+  return Number.isInteger(max) && max > 0 ? max : 0;
+}
+
+function fitsPlan(count){
+  const max = planLimit();
+  return !max || count <= max;
+}
+
+function planLimitMessage(){
+  const name = accountAccess.plan && accountAccess.plan.name ? accountAccess.plan.name : 'actual';
+  return `Tu plan ${name} permite guardar ${planLimit()} cartas.`;
+}
+
+function rememberAccount(data){
+  const plan = data && data.plan ? data.plan : null;
+  accountAccess = {
+    isAdmin: Boolean(data && data.isAdmin),
+    plan,
+    maxCards: plan && Number.isInteger(plan.maxCards) ? plan.maxCards : 0,
+  };
+  paintAdminLink();
+}
+
+async function readApiError(res){
+  try{
+    const data = await res.json();
+    if(data && data.error) return String(data.error);
+  }catch(e){}
+  return 'HTTP ' + res.status;
+}
+
+async function fetchRemoteAlbum(){
   const token = await sessionToken();
   if(!token) throw new Error('sin sesión');
   const res = await fetch(albumConfig().apiBase + '/api/collection', {
     headers: { Authorization: 'Bearer ' + token },
   });
-  if(!res.ok) throw new Error('HTTP ' + res.status);
+  if(!res.ok) throw new Error(await readApiError(res));
   const data = await res.json();
   if(!data || !Array.isArray(data.cards)) throw new Error('respuesta inválida');
+  rememberAccount(data);
   return data.cards;
 }
 
@@ -612,7 +688,7 @@ async function putRemoteCards(collection){
     },
     body: JSON.stringify({ cards }),
   });
-  if(!res.ok) throw new Error('HTTP ' + res.status);
+  if(!res.ok) throw new Error(await readApiError(res));
 }
 
 async function hydrateRemoteCards(cards){
@@ -639,16 +715,18 @@ async function hydrateRemoteCards(cards){
 
 async function loadCollection(){
   if(!remoteAlbumEnabled()){
+    clearAccountAccess();
     state.collection = readStoredCollection(STORAGE_KEY);
     return;
   }
   const userId = currentUserId();
   try{
-    const remote = await fetchRemoteCards();
+    const remote = await fetchRemoteAlbum();
     state.collection = await hydrateRemoteCards(remote);
     writeStoredCollection(accountCacheKey(userId), state.collection);
   }catch(e){
     console.error('No se pudo leer el álbum de la cuenta', e);
+    reportClientError(e, 'leer-album');
     state.collection = readStoredCollection(accountCacheKey(userId));
     showToast('No se pudo leer tu cuenta. Muestro la última copia de esta cuenta.');
   }
@@ -662,6 +740,7 @@ async function saveCollection(){
   }catch(e){
     console.error('No se pudo guardar la colección', e);
     showToast('No se pudo guardar (¿modo incógnito o almacenamiento lleno?)');
+    reportClientError(e, 'guardar-local');
     if(!signedIn) return;
   }
   if(!signedIn) return;
@@ -669,7 +748,10 @@ async function saveCollection(){
     await putRemoteCards(state.collection);
   }catch(e){
     console.error('No se pudo guardar en la cuenta', e);
-    showToast('No se pudo guardar en tu cuenta. Quedó solo la copia de esta cuenta.');
+    reportClientError(e, 'guardar-album');
+    showToast(e && e.message && e.message.indexOf('plan') !== -1
+      ? e.message
+      : 'No se pudo guardar en tu cuenta. Quedó solo la copia de esta cuenta.');
   }
 }
 
@@ -884,6 +966,7 @@ function paintAuthSlot(){
   if(!clerk || !clerk.loaded || !clerk.user){
     if(btn) btn.hidden = false;
     if(userNode) userNode.hidden = true;
+    if(clerk && clerk.loaded && !clerk.user) clearAccountAccess();
     if(!clerkFailed) setAuthNote('Álbum en este dispositivo');
     return;
   }
@@ -896,6 +979,7 @@ function paintAuthSlot(){
     }
   }
   setAuthNote('Álbum de tu cuenta');
+  paintAdminLink();
 }
 
 function activateClerk(){
@@ -1002,6 +1086,18 @@ function importCollection(e){
       const imported = JSON.parse(ev.target.result);
       if(!Array.isArray(imported)) throw new Error('El archivo no tiene el formato esperado');
       let añadidas = 0, actualizadas = 0;
+      let nextCount = albumCardCount(state.collection);
+      for(const card of imported){
+        if(!card || !card.id) continue;
+        const qty = Math.max(1, Math.min(99, Number(card.qty) || 1));
+        const existing = state.collection.find(c => c.id === card.id);
+        if(existing) nextCount += Math.max(0, qty - existing.qty);
+        else nextCount += qty;
+      }
+      if(!fitsPlan(nextCount)){
+        showToast(planLimitMessage());
+        return;
+      }
       imported.forEach(card=>{
         if(!card || !card.id) return;
         const existing = state.collection.find(c => c.id === card.id);
@@ -2251,6 +2347,10 @@ function addScannedCard(card, lockMs=3000){
 
 /* ---------- acciones de colección ---------- */
 function addCardToCollection(card){
+  if(!fitsPlan(albumCardCount(state.collection) + 1)){
+    showToast(planLimitMessage());
+    return;
+  }
   const existing = state.collection.find(c => c.id === card.id);
   if(existing){
     existing.qty += 1;
@@ -2263,6 +2363,10 @@ function addCardToCollection(card){
 function changeQty(id, delta){
   const item = state.collection.find(c => c.id === id);
   if(!item) return;
+  if(delta > 0 && !fitsPlan(albumCardCount(state.collection) + delta)){
+    showToast(planLimitMessage());
+    return;
+  }
   item.qty += delta;
   if(item.qty <= 0){
     state.collection = state.collection.filter(c => c.id !== id);
@@ -2977,6 +3081,50 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
       loadSets();
     }
   });
+});
+
+function scrubClientText(value){
+  return String(value || '')
+    .replace(/data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+/gi, '[imagen]')
+    .replace(/__clerk_db_jwt=[^&\s#]+/gi, '__clerk_db_jwt=[omitido]')
+    .replace(/\bBearer\s+[A-Za-z0-9._\-]+/gi, 'Bearer [omitido]')
+    .replace(/\b(?:sk|pk)_(?:test|live)_[A-Za-z0-9]+\b/g, '[clave]')
+    .replace(/mongodb(?:\+srv)?:\/\/\S+/gi, 'mongodb://[omitido]')
+    .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, '[jwt]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 800);
+}
+
+function reportClientError(err, source){
+  const now = Date.now();
+  if(now - lastClientReport < 2000) return;
+  const message = scrubClientText(err && err.message ? err.message : err);
+  if(!message) return;
+  const base = albumConfig().apiBase;
+  if(!base) return;
+  lastClientReport = now;
+  const headers = { 'Content-Type': 'application/json' };
+  sessionToken().then((token) => {
+    if(token) headers.Authorization = 'Bearer ' + token;
+    return fetch(base + '/api/client-errors', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        message,
+        source: source || 'cliente',
+        stack: scrubClientText(err && err.stack).slice(0, 1200),
+        path: location.pathname,
+      }),
+    });
+  }).catch(() => {});
+}
+
+window.addEventListener('error', (event) => {
+  reportClientError(event.error || event.message || 'error', 'ventana');
+});
+window.addEventListener('unhandledrejection', (event) => {
+  reportClientError(event.reason || 'promesa', 'promesa');
 });
 
 /* ---------- init ---------- */

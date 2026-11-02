@@ -3,6 +3,31 @@ import { spawn } from 'node:child_process';
 import test from 'node:test';
 import { assertEnv } from './server.js';
 
+test('ADMIN_EMAIL vacío es válido y uno mal formado no incluye claves', () => {
+  const cfg = assertEnv({
+    CLERK_PUBLISHABLE_KEY: 'pk_test_local',
+    CLERK_SECRET_KEY: 'sk_test_local',
+    MONGODB_URI: 'mongodb://localhost/album',
+    PAGES_ORIGIN: 'https://almuoluupv.github.io',
+    ADMIN_EMAIL: '  Persona@Example.com ',
+  });
+  assert.equal(cfg.adminEmail, 'persona@example.com');
+  assert.throws(
+    () => assertEnv({
+      CLERK_PUBLISHABLE_KEY: 'pk_test_local',
+      CLERK_SECRET_KEY: 'sk_test_local',
+      MONGODB_URI: 'mongodb://localhost/album',
+      PAGES_ORIGIN: 'https://almuoluupv.github.io',
+      ADMIN_EMAIL: 'no-es-correo',
+    }),
+    (err) => {
+      assert.match(err.message, /ADMIN_EMAIL/);
+      assert.equal(err.message.includes('sk_test_local'), false);
+      return true;
+    },
+  );
+});
+
 test('assertEnv exige las cuatro variables y no devuelve la clave secreta en el mensaje', () => {
   assert.throws(
     () => assertEnv({ CLERK_PUBLISHABLE_KEY: 'pk_test_x', CLERK_SECRET_KEY: '', MONGODB_URI: '', PAGES_ORIGIN: '' }),

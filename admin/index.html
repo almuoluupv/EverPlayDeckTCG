@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Administración</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14171F; --surface:#1B1F2B; --surface-2:#242A3A; --line:rgba(241,239,233,.08);
+    --accent:#F5C518; --accent-ink:#3A2E00; --teal:#2FB9C4; --text:#F1EFE9; --muted:#8B90A0; --danger:#E4572E;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--ink); color:var(--text); font-family:Inter,sans-serif}
+  main{max-width:760px; margin:0 auto; padding:22px 16px 48px}
+  h1{font-family:'Space Grotesk',sans-serif; font-size:26px; margin:0 0 6px}
+  h2{font-family:'Space Grotesk',sans-serif; font-size:18px; margin:28px 0 10px}
+  a{color:var(--teal)}
+  p.lead{color:var(--muted); margin-top:0}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; margin:10px 0}
+  button,.btn{background:var(--accent); color:var(--accent-ink); border:0; border-radius:999px; padding:8px 14px; font-weight:700; cursor:pointer}
+  button.ghost{background:transparent; color:var(--text); border:1px solid var(--line)}
+  label{display:block; font-size:13px; margin:8px 0}
+  input,select{width:100%; background:var(--surface-2); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:8px 10px}
+  .row{display:flex; gap:10px; align-items:end; flex-wrap:wrap}
+  .row > *{flex:1; min-width:140px}
+  .meta{color:var(--muted); font-size:12px}
+  .error{color:var(--danger)}
+  pre{white-space:pre-wrap; font-size:12px; color:var(--muted); margin:6px 0 0}
+</style>
+</head>
+<body>
+<main>
+  <p class="meta"><a id="back" href="../">Volver al álbum</a></p>
+  <h1>Administración</h1>
+  <p class="lead" id="status">Comprobando la sesión…</p>
+  <div id="app"></div>
+</main>
+<script src="../config.js"></script>
+<script>
+const ADMIN_URL = 'https://almuoluupv.github.io/EverPlayDeckTCG/admin/';
+function albumConfig(){
+  const cfg = window.ALBUM_CONFIG || {};
+  return {
+    clerkPublishableKey: String(cfg.clerkPublishableKey || '').trim(),
+    apiBase: String(cfg.apiBase || '').trim().replace(/\/$/, ''),
+  };
+}
+function escapeHtml(value){
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function returnUrl(){
+  try{
+    if(location.hostname === 'almuoluupv.github.io') return ADMIN_URL;
+    return new URL('./', location).href;
+  }catch{
+    return ADMIN_URL;
+  }
+}
+function clerkHost(publishableKey){
+  const encoded = publishableKey.split('_')[2] || '';
+  let decoded = '';
+  try{ decoded = atob(encoded); }catch{ decoded = ''; }
+  return decoded.replace(/\$+$/, '');
+}
+function loadScript(src, attrs){
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.async = false;
+    script.crossOrigin = 'anonymous';
+    script.src = src;
+    Object.entries(attrs || {}).forEach(([key, value]) => script.setAttribute(key, value));
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('No se pudo cargar Clerk'));
+    document.head.appendChild(script);
+  });
+}
+function redirectOptions(){
+  const url = returnUrl();
+  return {
+    signInUrl: url,
+    signUpUrl: url,
+    signInForceRedirectUrl: url,
+    signInFallbackRedirectUrl: url,
+    signUpForceRedirectUrl: url,
+    signUpFallbackRedirectUrl: url,
+    afterSignOutUrl: url,
+    afterMultiSessionSingleSignOutUrl: url,
+  };
+}
+function devBrowserToken(original){
+  try{
+    const host = clerkHost(albumConfig().clerkPublishableKey);
+    return new URL(original('https://' + host + '/')).searchParams.get('__clerk_db_jwt') || '';
+  }catch{
+    return '';
+  }
+}
+function keepClerkDevBrowserOnReturn(clerk){
+  if(!clerk || clerk.__adminDevBrowser || clerk.instanceType === 'production') return;
+  if(typeof clerk.buildUrlWithAuth !== 'function') return;
+  const original = clerk.buildUrlWithAuth.bind(clerk);
+  clerk.buildUrlWithAuth = (value) => {
+    let url;
+    try{ url = new URL(original(value), location.href); }
+    catch{ return original(value); }
+    if(url.origin === location.origin && !url.searchParams.has('__clerk_db_jwt')){
+      const token = devBrowserToken(original);
+      if(token) url.searchParams.set('__clerk_db_jwt', token);
+    }
+    return url.href;
+  };
+  clerk.__adminDevBrowser = true;
+}
+async function sessionToken(){
+  const session = window.Clerk && window.Clerk.session;
+  if(!session || typeof session.getToken !== 'function') return '';
+  return (await session.getToken()) || '';
+}
+async function api(path, options){
+  const token = await sessionToken();
+  const res = await fetch(albumConfig().apiBase + path, {
+    method: options && options.method || 'GET',
+    headers: {
+      ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      ...(options && options.body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: options && options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const text = await res.text();
+  let json = null;
+  try{ json = text ? JSON.parse(text) : null; }catch{ json = null; }
+  return { status: res.status, json };
+}
+function setStatus(text){
+  document.getElementById('status').textContent = text;
+}
+
+let overview = null;
+
+function renderOverview(){
+  const root = document.getElementById('app');
+  const plans = overview.plans.map((plan) => `
+    <label>${escapeHtml(plan.name)}
+      <input data-plan="${escapeHtml(plan.id)}" type="number" min="1" max="100000" value="${plan.maxCards}">
+    </label>`).join('');
+  const users = overview.users.map((user) => `
+    <div class="card">
+      <strong>${escapeHtml(user.email || user.userId)}</strong>
+      ${user.admin ? '<span class="meta"> · admin</span>' : ''}
+      <div class="meta">${escapeHtml(user.name || '')} · ${user.cards} cartas guardadas</div>
+      <div class="row">
+        <label>Plan
+          <select data-user="${escapeHtml(user.userId)}">
+            ${overview.plans.map((plan) => `<option value="${plan.id}" ${plan.id === user.planId ? 'selected' : ''}>${escapeHtml(plan.name)}</option>`).join('')}
+          </select>
+        </label>
+        <button type="button" data-save-user="${escapeHtml(user.userId)}">Guardar plan</button>
+      </div>
+    </div>`).join('') || '<p class="meta">Todavía no ha entrado nadie.</p>';
+  const logs = overview.logs.map((row) => `
+    <div class="card">
+      <div class="meta">${escapeHtml(row.createdAt)} · ${escapeHtml(row.email || row.userId || 'sin sesión')} · ${escapeHtml(row.source || '')} · ${escapeHtml(row.path || '')}</div>
+      <div>${escapeHtml(row.message)}</div>
+      ${row.stack ? `<pre>${escapeHtml(row.stack)}</pre>` : ''}
+    </div>`).join('') || '<p class="meta">No hay avisos.</p>';
+  root.innerHTML = `
+    <h2>Planes</h2>
+    <form id="plansForm" class="card">
+      <p class="meta">El máximo es la suma de copias que esa cuenta puede guardar en el álbum.</p>
+      ${plans}
+      <button type="submit">Guardar máximos</button>
+    </form>
+    <h2>Usuarios</h2>
+    ${users}
+    <h2>Avisos del navegador</h2>
+    ${logs}`;
+  document.getElementById('plansForm').addEventListener('submit', savePlans);
+  root.querySelectorAll('[data-save-user]').forEach((button) => {
+    button.addEventListener('click', () => saveUser(button.dataset.saveUser));
+  });
+}
+
+async function savePlans(event){
+  event.preventDefault();
+  const plans = overview.plans.map((plan) => {
+    const input = document.querySelector(`[data-plan="${plan.id}"]`);
+    return { id: plan.id, maxCards: Number(input.value) };
+  });
+  const res = await api('/api/admin/plans', { method: 'PUT', body: { plans } });
+  if(res.status !== 200){
+    setStatus(res.json && res.json.error ? res.json.error : 'No se pudieron guardar los planes');
+    return;
+  }
+  await loadOverview();
+  setStatus('Máximos guardados.');
+}
+
+async function saveUser(userId){
+  const select = document.querySelector(`select[data-user="${CSS.escape(userId)}"]`);
+  const res = await api('/api/admin/users', { method: 'PUT', body: { userId, planId: select.value } });
+  if(res.status !== 200){
+    setStatus(res.json && res.json.error ? res.json.error : 'No se pudo cambiar el plan');
+    return;
+  }
+  await loadOverview();
+  setStatus('Plan actualizado.');
+}
+
+async function loadOverview(){
+  const res = await api('/api/admin');
+  if(res.status === 403 || res.status === 401){
+    document.getElementById('app').innerHTML = '';
+    setStatus('No tienes acceso a esta página.');
+    return;
+  }
+  if(res.status !== 200 || !res.json){
+    setStatus('No se pudo cargar la administración.');
+    return;
+  }
+  overview = res.json;
+  setStatus('Solo visible para la cuenta de administración.');
+  renderOverview();
+}
+
+async function boot(){
+  const optional = document.createElement('script');
+  optional.src = '../config.local.js';
+  optional.onerror = () => {};
+  document.head.appendChild(optional);
+  await new Promise((resolve) => { optional.onload = resolve; optional.onerror = resolve; });
+  const cfg = albumConfig();
+  if(!cfg.apiBase || !cfg.clerkPublishableKey){
+    setStatus('Falta la configuración pública.');
+    return;
+  }
+  const host = clerkHost(cfg.clerkPublishableKey);
+  await loadScript(`https://${host}/npm/@clerk/ui@1/dist/ui.browser.js`);
+  await loadScript(`https://${host}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`, {
+    'data-clerk-publishable-key': cfg.clerkPublishableKey,
+  });
+  if(typeof window.Clerk === 'function') window.Clerk = new window.Clerk(cfg.clerkPublishableKey);
+  await window.Clerk.load({
+    ui: { ClerkUI: window.__internal_ClerkUICtor },
+    ...redirectOptions(),
+  });
+  keepClerkDevBrowserOnReturn(window.Clerk);
+  if(!window.Clerk.user){
+    setStatus('Entra en el álbum con tu cuenta. El enlace de administración solo aparece si esa cuenta es admin.');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Entrar';
+    button.addEventListener('click', () => {
+      if(typeof window.Clerk.openSignIn === 'function'){
+        window.Clerk.openSignIn({ withSignUp: true, transferable: true, oauthFlow: 'redirect', forceRedirectUrl: returnUrl(), fallbackRedirectUrl: returnUrl() });
+      }
+    });
+    document.getElementById('app').appendChild(button);
+    return;
+  }
+  await loadOverview();
+}
+boot().catch((err) => {
+  console.error(err);
+  setStatus('No se pudo abrir la administración.');
+});
+</script>
+</body>
+</html>

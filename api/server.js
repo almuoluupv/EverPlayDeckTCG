@@ -1,7 +1,8 @@
 import { createServer } from 'node:http';
 import { MongoClient } from 'mongodb';
-import { verifyToken } from '@clerk/backend';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import { createApp } from './app.js';
+import { createDirectory } from './directory.js';
 import { pagesOrigin, userIdFromVerification } from './collection.js';
 
 const REQUIRED = ['CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY', 'MONGODB_URI', 'PAGES_ORIGIN'];
@@ -21,21 +22,84 @@ export function assertEnv(env = process.env) {
   if (!/^sk_(test|live)_/.test(secretKey)) {
     throw new Error('CLERK_SECRET_KEY no tiene el formato sk_test_ o sk_live_');
   }
+  const adminEmail = String(env.ADMIN_EMAIL || '').trim().toLowerCase();
+  if (adminEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
+    throw new Error('ADMIN_EMAIL no es un correo');
+  }
   return {
     secretKey,
     publishableKey,
     mongodbUri: env.MONGODB_URI.trim(),
     pagesOrigin: pagesOrigin(env.PAGES_ORIGIN.trim()),
+    adminEmail,
   };
 }
 
-async function albumsCollection(uri) {
+async function openDatabase(uri) {
   const client = new MongoClient(uri, { serverSelectionTimeoutMS: 8000 });
   try {
     await client.connect();
-    const albums = client.db('album').collection('albums');
+    const db = client.db('album');
+    const albums = db.collection('albums');
+    const users = db.collection('users');
+    const plans = db.collection('plans');
+    const logs = db.collection('errorLogs');
     await albums.createIndex({ userId: 1 }, { unique: true });
-    return albums;
+    await users.createIndex({ userId: 1 }, { unique: true });
+    await logs.createIndex({ createdAt: -1 });
+    return {
+      users: {
+        async findOne(filter) {
+          return users.findOne(filter, { projection: { _id: 0 } });
+        },
+        async insertOne(doc) {
+          await users.insertOne(doc);
+        },
+        async updateOne(filter, update) {
+          await users.updateOne(filter, update);
+        },
+        async countDocuments(filter) {
+          return users.countDocuments(filter);
+        },
+        async list() {
+          return users.find({}, { projection: { _id: 0 } }).sort({ createdAt: 1 }).limit(500).toArray();
+        },
+      },
+      albums: {
+        async get(userId) {
+          const doc = await albums.findOne({ userId }, { projection: { _id: 0, cards: 1 } });
+          return Array.isArray(doc?.cards) ? doc.cards : [];
+        },
+        async put(userId, cards) {
+          await albums.updateOne(
+            { userId },
+            { $set: { userId, cards, updatedAt: new Date() } },
+            { upsert: true },
+          );
+        },
+      },
+      plans: {
+        async load() {
+          const doc = await plans.findOne({ _id: 'current' }, { projection: { plans: 1 } });
+          return Array.isArray(doc?.plans) ? doc.plans : null;
+        },
+        async save(next) {
+          await plans.updateOne({ _id: 'current' }, { $set: { plans: next } }, { upsert: true });
+        },
+      },
+      logs: {
+        async insert(entry) {
+          await logs.insertOne(entry);
+        },
+        async latest(limit) {
+          return logs.find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(limit).toArray();
+        },
+        async trim(keep) {
+          const border = await logs.find({}, { projection: { createdAt: 1 } }).sort({ createdAt: -1 }).skip(keep).limit(1).toArray();
+          if (border[0]?.createdAt) await logs.deleteMany({ createdAt: { $lt: border[0].createdAt } });
+        },
+      },
+    };
   } catch (err) {
     await client.close().catch(() => {});
     const wrapped = new Error('No se pudo conectar a MongoDB');
@@ -45,45 +109,96 @@ async function albumsCollection(uri) {
   }
 }
 
-export async function startServer({ env = process.env, verifyTokenImpl = verifyToken } = {}) {
+function profileFromClerkUser(user) {
+  const primary = user?.primaryEmailAddress?.emailAddress
+    || user?.emailAddresses?.find((row) => row.id === user.primaryEmailAddressId)?.emailAddress
+    || user?.emailAddresses?.[0]?.emailAddress
+    || '';
+  return {
+    email: String(primary || '').trim().toLowerCase(),
+    name: [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim(),
+    markedAdmin: user?.publicMetadata?.albumAdmin === true,
+  };
+}
+
+export async function startServer({ env = process.env, verifyTokenImpl = verifyToken, clerkClient = null } = {}) {
   const cfg = assertEnv(env);
-  let albumsPromise = null;
-  const albums = () => {
-    if (!albumsPromise) {
-      albumsPromise = albumsCollection(cfg.mongodbUri).catch((err) => {
-        albumsPromise = null;
+  const clerk = clerkClient || createClerkClient({ secretKey: cfg.secretKey });
+  const known = new Map();
+  let dbPromise = null;
+  const database = () => {
+    if (!dbPromise) {
+      dbPromise = openDatabase(cfg.mongodbUri).catch((err) => {
+        dbPromise = null;
         throw err;
       });
     }
-    return albumsPromise;
+    return dbPromise;
   };
+  let directoryPromise = null;
+  const directory = async () => {
+    if (!directoryPromise) {
+      directoryPromise = database().then((deps) => createDirectory({ ...deps, adminEmail: cfg.adminEmail }));
+    }
+    return directoryPromise;
+  };
+
+  async function verifySession(token) {
+    let result;
+    try {
+      result = await verifyTokenImpl(token, {
+        secretKey: cfg.secretKey,
+        authorizedParties: [cfg.pagesOrigin],
+      });
+    } catch {
+      return null;
+    }
+    const userId = userIdFromVerification(result);
+    if (!userId) return null;
+    if (known.has(userId)) return { userId, ...known.get(userId) };
+    let extra = { email: '', name: '', markedAdmin: false };
+    try {
+      extra = profileFromClerkUser(await clerk.users.getUser(userId));
+    } catch {
+      extra = { email: '', name: '', markedAdmin: false };
+    }
+    known.set(userId, extra);
+    return { userId, ...extra };
+  }
 
   const app = createApp({
     pagesOrigin: cfg.pagesOrigin,
-    verifySession: async (token) => {
-      try {
-        const result = await verifyTokenImpl(token, {
-          secretKey: cfg.secretKey,
-          authorizedParties: [cfg.pagesOrigin],
-        });
-        return userIdFromVerification(result);
-      } catch {
-        return null;
-      }
-    },
+    verifySession,
     store: {
+      async touch(profile) {
+        return (await directory()).touch(profile);
+      },
       async get(userId) {
-        const collection = await albums();
-        const doc = await collection.findOne({ userId }, { projection: { _id: 0, cards: 1 } });
-        return Array.isArray(doc?.cards) ? doc.cards : [];
+        return (await directory()).get(userId);
       },
       async put(userId, cards) {
-        const collection = await albums();
-        await collection.updateOne(
-          { userId },
-          { $set: { userId, cards, updatedAt: new Date() } },
-          { upsert: true },
-        );
+        return (await directory()).put(userId, cards);
+      },
+      async account(userId) {
+        return (await directory()).account(userId);
+      },
+      async addLog(entry) {
+        return (await directory()).addLog(entry);
+      },
+      async listUsers() {
+        return (await directory()).listUsers();
+      },
+      async setUserPlan(userId, planId) {
+        return (await directory()).setUserPlan(userId, planId);
+      },
+      async getPlans() {
+        return (await directory()).getPlans();
+      },
+      async setPlanCaps(input) {
+        return (await directory()).setPlanCaps(input);
+      },
+      async listLogs(limit) {
+        return (await directory()).listLogs(limit);
       },
     },
   });
