@@ -38,7 +38,7 @@ Escucha en `0.0.0.0` y en el puerto de `PORT` (en local, 8787). `GET /` responde
 
 Tras entrar o salir, Clerk vuelve a `https://almuoluupv.github.io/EverPlayDeckTCG/` (con la carpeta del repositorio y la barra final). No uses la raíz `https://almuoluupv.github.io/`: esa dirección no sirve la web.
 
-Google crea la cuenta si todavía no existe (`withSignUp`). La instancia de desarrollo no guarda la sesión en una cookie: el regreso desde Google tiene que llevar `__clerk_db_jwt` y quedarse en esa misma ruta.
+Google, también una cuenta nueva, entra por alta (`withSignUp`, `transferable`) y vuelve a esa misma ruta. En el móvil el regreso no puede depender de un ancla `#/sso-callback`: la instancia de desarrollo va sin cookie y el token `__clerk_db_jwt` tiene que ir en la query.
 
 `MONGODB_URI` es la cadena de Atlas del clúster. En Network Access de Atlas permite `0.0.0.0/0`: el plan gratuito de Render no tiene una IP fija de salida. La API guarda el álbum en la base `album`, colección `albums`, como `{ cardId, qty }`.
 

@@ -704,34 +704,100 @@ function clerkRedirectOptions(){
   };
 }
 
+function devBrowserToken(original){
+  try{
+    const host = clerkHost(albumConfig().clerkPublishableKey);
+    return new URL(original('https://' + host + '/')).searchParams.get('__clerk_db_jwt') || '';
+  }catch{
+    return '';
+  }
+}
+
+function hashQuery(hash){
+  const q = (hash || '').indexOf('?');
+  if(q < 0) return new URLSearchParams();
+  return new URLSearchParams(hash.slice(q + 1));
+}
+
+function isSsoReturn(url){
+  const hash = url.hash || '';
+  return hash.includes('sso-callback') || url.pathname.includes('/sso-callback');
+}
+
 function keepClerkDevBrowserOnReturn(clerk){
   if(!clerk || clerk.__albumDevBrowser || clerk.instanceType === 'production') return;
   if(typeof clerk.buildUrlWithAuth !== 'function') return;
   const original = clerk.buildUrlWithAuth.bind(clerk);
   clerk.buildUrlWithAuth = (value) => {
-    const built = original(value);
     let url;
-    try{ url = new URL(built, window.location.href); }
-    catch{ return built; }
-    if(url.origin !== window.location.origin || url.searchParams.has('__clerk_db_jwt')) return url.href;
-    let token = '';
-    try{
-      const host = clerkHost(albumConfig().clerkPublishableKey);
-      token = new URL(original('https://' + host + '/')).searchParams.get('__clerk_db_jwt') || '';
-    }catch{ token = ''; }
-    if(!token) return url.href;
-    url.searchParams.set('__clerk_db_jwt', token);
+    try{ url = new URL(original(value), window.location.href); }
+    catch{ return original(value); }
+    if(isSsoReturn(url)){
+      const back = new URL(clerkReturnUrl());
+      url.searchParams.forEach((v, k) => { if(!back.searchParams.has(k)) back.searchParams.set(k, v); });
+      hashQuery(url.hash).forEach((v, k) => { if(!back.searchParams.has(k)) back.searchParams.set(k, v); });
+      url = back;
+    }
+    if(url.origin === window.location.origin && !url.searchParams.has('__clerk_db_jwt')){
+      const token = devBrowserToken(original);
+      if(token) url.searchParams.set('__clerk_db_jwt', token);
+    }
     return url.href;
   };
   clerk.__albumDevBrowser = true;
 }
 
 function prepareGoogleReturn(){
-  const hash = window.location.hash || '';
-  if(!hash.includes('sso-callback')) return;
   const url = new URL(window.location.href);
+  const hash = url.hash || '';
+  if(!hash.includes('sso-callback') && !hash.includes('__clerk_status') && !hash.includes('__clerk_db_jwt')) return;
+  hashQuery(hash).forEach((v, k) => { if(!url.searchParams.has(k)) url.searchParams.set(k, v); });
   url.hash = '';
   history.replaceState(null, '', url.href);
+}
+
+function googleTransferPending(clerk){
+  const signIn = clerk.client && clerk.client.signIn;
+  const signUp = clerk.client && clerk.client.signUp;
+  const verification = signIn && signIn.firstFactorVerification;
+  const external = signUp && signUp.verifications && signUp.verifications.externalAccount;
+  const code = (verification && verification.error && verification.error.code)
+    || (external && external.error && external.error.code)
+    || '';
+  const status = (verification && verification.status) || (external && external.status) || '';
+  return status === 'transferable' || code === 'external_account_not_found' || code === 'sign_up_if_missing';
+}
+
+async function createGoogleUser(clerk){
+  const signUp = clerk.client && clerk.client.signUp;
+  if(!signUp || typeof signUp.create !== 'function' || !googleTransferPending(clerk)) return false;
+  const created = await signUp.create({ transfer: true });
+  if(created && created.status === 'complete' && created.createdSessionId){
+    await clerk.setActive({ session: created.createdSessionId, redirectUrl: clerkReturnUrl() });
+    return true;
+  }
+  if(created && created.status === 'missing_requirements' && typeof clerk.openSignIn === 'function'){
+    clerk.openSignIn(signInModalOptions());
+    setAuthNote('Falta un dato para crear la cuenta.');
+    return true;
+  }
+  return false;
+}
+
+function stayOnAlbum(clerk, dest){
+  let target;
+  try{ target = new URL(dest, window.location.href); }
+  catch{ return clerk.navigate(clerkReturnUrl()); }
+  const onPages = target.hostname === 'almuoluupv.github.io';
+  if(onPages && !target.pathname.startsWith('/EverPlayDeckTCG')) return clerk.navigate(clerkReturnUrl());
+  const unfinished = /continue|factor|verify|sso-callback/i.test((target.hash || '') + target.pathname);
+  if(unfinished && !clerk.user){
+    if(typeof clerk.openSignIn === 'function') clerk.openSignIn(signInModalOptions());
+    return;
+  }
+  const here = new URL(window.location.href);
+  if(onPages && target.pathname === here.pathname && target.search === here.search) return;
+  return clerk.navigate(dest);
 }
 
 async function finishGoogleReturn(){
@@ -739,24 +805,22 @@ async function finishGoogleReturn(){
   if(!params.get('__clerk_status') && !params.get('__clerk_created_session')) return;
   const clerk = window.Clerk;
   if(!clerk || typeof clerk.handleRedirectCallback !== 'function') return;
-  const back = clerkRedirectOptions();
+  const back = clerkReturnUrl();
   try{
     await clerk.handleRedirectCallback({
-      ...back,
+      ...clerkRedirectOptions(),
       transferable: true,
-    }, (dest) => {
-      let target;
-      try{ target = new URL(dest, window.location.href); }
-      catch{ return clerk.navigate(dest); }
-      const unfinished = /continue|factor|verify|sso-callback/i.test(target.hash + target.pathname);
-      if(target.origin === window.location.origin && unfinished && !clerk.user){
-        history.replaceState(null, '', target.href);
-        if(typeof clerk.openSignIn === 'function') clerk.openSignIn(signInModalOptions());
-        return;
-      }
-      return clerk.navigate(dest);
-    });
+      signUpFallbackRedirectUrl: back,
+      signInFallbackRedirectUrl: back,
+      fallbackRedirectUrl: back,
+    }, (dest) => stayOnAlbum(clerk, dest));
+    if(!clerk.user) await createGoogleUser(clerk);
   }catch(e){
+    try{
+      if(await createGoogleUser(clerk)) return;
+    }catch(transferError){
+      console.error(transferError);
+    }
     console.error(e);
     setAuthNote('No se pudo completar el acceso con Google. El álbum sigue en este dispositivo.');
     if(typeof clerk.openSignIn === 'function' && !clerk.user) clerk.openSignIn(signInModalOptions());
@@ -767,6 +831,8 @@ function signInModalOptions(){
   const back = clerkRedirectOptions();
   return {
     withSignUp: true,
+    transferable: true,
+    oauthFlow: 'redirect',
     forceRedirectUrl: back.signInForceRedirectUrl,
     fallbackRedirectUrl: back.signInFallbackRedirectUrl,
     signInForceRedirectUrl: back.signInForceRedirectUrl,
