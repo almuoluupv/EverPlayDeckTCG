@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="album-build" content="2026.11.03.3">
+<meta name="album-build" content="2026.11.03.4">
 <title>Mi Álbum Pokémon</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -633,7 +633,7 @@ const state = {
 /* El catálogo sale de ./data/. El álbum usa la API solo con sesión y config.js
    relleno. Si falta la clave, la URL de la API o el login, se queda en localStorage. */
 
-const APP_BUILD = '2026.11.03.3';
+const APP_BUILD = '2026.11.03.4';
 const STORAGE_KEY = 'pokemon_album_collection_v1';
 let authListenerReady = false;
 let clerkFailed = false;
@@ -1977,6 +1977,7 @@ async function startLiveScan(){
       });
     }
     await engageTrackZoom(cameraTrack);
+    updateCameraZoomUI();
     render();
     await beginLiveRecognition();
   }catch(err){
@@ -2076,7 +2077,7 @@ function bindLivePreview(video){
   if(!video || !mediaStream) return;
   video.muted = true;
   video.playsInline = true;
-  if(video.srcObject === mediaStream) return;
+  if(video.srcObject) return;
   video.srcObject = mediaStream;
   if(video.paused) video.play().catch(()=>{});
 }
@@ -2099,17 +2100,20 @@ function updateCameraZoomUI(){
   const visual=state.scan.hardwareZoom ? 1 : (state.scan.zoom || 1);
   if(layer){
     layer.style.setProperty('--camera-display-zoom', String(visual));
-    layer.style.transform='none';
-    const wrap=layer.closest('.video-wrap');
-    if(wrap && wrap.clientWidth && wrap.clientHeight){
-      const w=wrap.clientWidth*visual, h=wrap.clientHeight*visual;
-      layer.style.width=w+'px';
-      layer.style.height=h+'px';
-      layer.style.left=((wrap.clientWidth-w)/2)+'px';
-      layer.style.top=((wrap.clientHeight-h)/2)+'px';
-    }else if(layer.dataset.zoomRetry!=='1'){
-      layer.dataset.zoomRetry='1';
-      requestAnimationFrame(()=>updateCameraZoomUI());
+    if(layer.dataset.zoomApplied !== String(visual)){
+      layer.style.transform='none';
+      const wrap=layer.closest('.video-wrap');
+      if(wrap && wrap.clientWidth && wrap.clientHeight){
+        const w=wrap.clientWidth*visual, h=wrap.clientHeight*visual;
+        layer.style.width=w+'px';
+        layer.style.height=h+'px';
+        layer.style.left=((wrap.clientWidth-w)/2)+'px';
+        layer.style.top=((wrap.clientHeight-h)/2)+'px';
+        layer.dataset.zoomApplied=String(visual);
+      }else if(layer.dataset.zoomRetry!=='1'){
+        layer.dataset.zoomRetry='1';
+        requestAnimationFrame(()=>updateCameraZoomUI());
+      }
     }
   }
   if(range){ range.min=state.scan.zoomMin; range.max=state.scan.zoomMax; range.step=state.scan.zoomStep; range.value=state.scan.zoom; }
@@ -2588,14 +2592,20 @@ async function captureAndRecognize(){
 }
 
 
-function addScannedCard(card, lockMs=3000){
+function addScannedCard(card){
   addCardToCollection(card);
   state.scan.recent.unshift(card);
   state.scan.recent=state.scan.recent.slice(0,6);
-  state.scan.cooldownUntil=Date.now()+lockMs;
+  state.scan.pendingConfirm=null;
   state.scan.suggestions=[];
+  state.scan.nameResults=[];
+  state.scan.liveText='';
+  state.scan.liveError='';
+  state.scan.livePhase='scanning';
+  state.scan.liveStatus='scanning';
+  state.scan.liveMessage='Listo. Ajusta los recuadros y pulsa Capturar.';
+  if(liveScanTimer){ clearTimeout(liveScanTimer); liveScanTimer=null; }
   render();
-  queueLiveRecognitionFrame(lockMs);
 }
 
 /* ---------- acciones de colección ---------- */
@@ -2792,7 +2802,7 @@ function renderScanTabLive(modeRow){
   const side = document.getElementById('scanSide');
   const recentHost = document.getElementById('scanRecent');
   const status = document.getElementById('liveStatusText');
-  if(s.liveActive && video && side && recentHost && status && video.srcObject === mediaStream){
+  if(s.liveActive && video && side && recentHost && status){
     side.innerHTML = actions + confirm;
     recentHost.innerHTML = recent;
     status.textContent = statusLine;
@@ -2806,7 +2816,6 @@ function renderScanTabLive(modeRow){
       }
       err.textContent = s.liveError;
     }else if(err) err.remove();
-    updateCameraZoomUI();
     return;
   }
   document.getElementById('main').innerHTML = `${modeRow}<div class="scan-layout"><div class="scan-stage">${stage}</div><div class="scan-side" id="scanSide">${actions}${confirm}</div></div><div id="scanRecent">${recent}</div>`;

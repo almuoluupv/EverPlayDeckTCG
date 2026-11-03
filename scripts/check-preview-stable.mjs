@@ -147,10 +147,59 @@ try {
   assert(after.layerZoom === '1', 'el marco se escaló además del zoom del track: ' + after.layerZoom);
   assert(after.layerRatio > 0.9 && after.layerRatio < 1.15, 'el marco no coincide con la vista: ' + after.layerRatio);
   assert(after.layerTransform === 'none', 'el marco sigue usando transform: ' + after.layerTransform);
-  assert(after.build === '2026.11.03.3' && after.stamp.includes('2026.11.03.3'), 'falta la versión visible: ' + after.stamp);
+  assert(after.build === '2026.11.03.4' && after.stamp.includes('2026.11.03.4'), 'falta la versión visible: ' + after.stamp);
   await page.click('#resetZoomBtn');
   const resetZoom = await page.evaluate(() => window.__constraintCalls.at(-1).advanced[0].zoom);
   assert(resetZoom === 3, 'restablecer no volvió al acercamiento inicial: ' + resetZoom);
+
+  await page.evaluate(() => {
+    captureAndRecognize = async () => {
+      const n = (window.__captures = (window.__captures || 0) + 1);
+      state.scan.pendingConfirm = { id: 'cycle-' + n, name: 'Carta ' + n, setName: 'Prueba', number: String(n), image: '' };
+      state.scan.suggestions = [{ id: 'other-' + n, name: 'Otra', setName: 'Prueba', number: '9', image: '' }];
+      state.scan.nameResults = [];
+      state.scan.liveMessage = 'Confirma la carta';
+      render();
+    };
+    window.__frame = () => {
+      const video = document.getElementById('liveVideo');
+      const layer = document.getElementById('previewZoom');
+      return {
+        sameNode: video === window.__preview,
+        sameStream: video.srcObject === window.__stream,
+        width: video.videoWidth,
+        height: video.videoHeight,
+        layerW: layer.style.width,
+        layerH: layer.style.height,
+        layerL: layer.style.left,
+        layerT: layer.style.top,
+        transform: getComputedStyle(layer).transform,
+        videoTransform: getComputedStyle(video).transform,
+        zoom: state.scan.zoom,
+        hardware: state.scan.hardwareZoom,
+        roi: JSON.stringify(state.scan.roi),
+        roiNum: JSON.stringify(state.scan.roiNum),
+        gum: window.__gumCalls,
+        constraints: window.__constraintCalls.length,
+      };
+    };
+  });
+  const framed = await page.evaluate(() => window.__frame());
+  for (let cycle = 1; cycle <= 2; cycle++) {
+    await page.evaluate(() => document.getElementById('captureAgainBtn').click());
+    await page.waitForSelector('#confirmYesBtn', { timeout: 5000 });
+    await page.evaluate(() => document.getElementById('confirmYesBtn').click());
+    await page.waitForFunction(() => !document.getElementById('confirmYesBtn') && state.scan.pendingConfirm == null && !!document.getElementById('liveVideo'), { timeout: 5000 });
+    const next = await page.evaluate(() => window.__frame());
+    assert(JSON.stringify(next) === JSON.stringify(framed), 'la carta ' + cycle + ' movió la vista: ' + JSON.stringify({ framed, next }));
+    const ready = await page.evaluate(() => ({
+      phase: state.scan.livePhase,
+      suggestions: state.scan.suggestions.length,
+      recent: state.scan.recent.length,
+      message: state.scan.liveMessage,
+    }));
+    assert(ready.phase === 'scanning' && ready.suggestions === 0 && ready.recent === cycle, 'no quedó lista para la siguiente carta: ' + JSON.stringify(ready));
+  }
 
   const plain = await browser.newPage();
   await plain.goto(origin + '/', { waitUntil: 'domcontentloaded', timeout: 20000 });
