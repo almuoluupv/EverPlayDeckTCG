@@ -134,7 +134,9 @@ try {
   assert(after.constraints[0].width.exact === 1920 && after.constraints[0].height.exact === 1080, 'no se pidió el máximo del track: ' + JSON.stringify(after.constraints[0]));
   assert(!after.constraints[0].advanced, 'la resolución no debe mezclarse con el zoom');
   assert(after.constraints[1] && after.constraints[1].advanced[0].zoom === 3, 'el zoom de apertura no acerca: ' + JSON.stringify(after.constraints[1]));
-  const zoomCalls = after.constraints.slice(1);
+  const zoomCalls = after.constraints.slice(1).filter((call) => call.advanced && call.advanced[0].zoom != null);
+  const primedFocus = after.constraints.filter((call) => call.advanced && call.advanced[0].focusMode);
+  assert(primedFocus.length === 1 && primedFocus[0].advanced[0].focusMode === 'continuous' && !primedFocus[0].width, 'el enfoque continuo no quedó en una sola llamada: ' + JSON.stringify(primedFocus));
   assert(zoomCalls.every((call) => !call.width && !call.height && call.advanced && call.advanced[0].zoom), 'el deslizador cambió la resolución: ' + JSON.stringify(zoomCalls));
   assert(zoomCalls.some((call) => call.advanced[0].zoom === 2) && zoomCalls.some((call) => call.advanced[0].zoom === 1.5), 'el deslizador no movió el zoom del track: ' + JSON.stringify(zoomCalls));
   assert(after.sameNode, 'Ajustar zona sustituyó el elemento de vídeo');
@@ -147,7 +149,7 @@ try {
   assert(after.layerZoom === '1', 'el marco se escaló además del zoom del track: ' + after.layerZoom);
   assert(after.layerRatio > 0.9 && after.layerRatio < 1.15, 'el marco no coincide con la vista: ' + after.layerRatio);
   assert(after.layerTransform === 'none', 'el marco sigue usando transform: ' + after.layerTransform);
-  assert(after.build === '2026.11.03.4' && after.stamp.includes('2026.11.03.4'), 'falta la versión visible: ' + after.stamp);
+  assert(after.build === '2026.11.03.5' && after.stamp.includes('2026.11.03.5'), 'falta la versión visible: ' + after.stamp);
   await page.click('#resetZoomBtn');
   const resetZoom = await page.evaluate(() => window.__constraintCalls.at(-1).advanced[0].zoom);
   assert(resetZoom === 3, 'restablecer no volvió al acercamiento inicial: ' + resetZoom);
@@ -278,7 +280,151 @@ try {
   assert(ignored.scale === '4', 'si el track no confirma, el deslizador no escala el marco: ' + ignored.scale);
   assert(ignored.ratio > 3.5 && ignored.ratio < 4.5, 'el marco no creció: ' + ignored.ratio);
   assert(ignored.videoTransform === 'none', 'se escaló el vídeo');
-  console.log('preview-stable-ok', JSON.stringify({ openZoom: 3, slider: zoomCalls.map((call) => call.advanced[0].zoom), fallback: fallback.scale, ignored: ignored.scale }));
+
+  const focusPage = await browser.newPage();
+  await focusPage.goto(origin + '/', { waitUntil: 'domcontentloaded', timeout: 20000 });
+  await focusPage.waitForSelector('#startLiveBtn', { timeout: 15000 });
+  await focusPage.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    canvas.getContext('2d').fillRect(0, 0, 1280, 720);
+    const stream = canvas.captureStream(8);
+    const track = stream.getVideoTracks()[0];
+    const settings = {
+      width: 1280, height: 720, zoom: 1,
+      focusMode: 'continuous', focusDistance: 0.12,
+      exposureMode: 'continuous', exposureTime: 0.008, iso: 200,
+      whiteBalanceMode: 'continuous', colorTemperature: 4500,
+    };
+    window.__constraintCalls = [];
+    window.__gumCalls = 0;
+    track.applyConstraints = (constraints) => {
+      window.__constraintCalls.push(JSON.parse(JSON.stringify(constraints)));
+      const bag = (constraints.advanced && constraints.advanced[0]) || constraints;
+      for (const key of ['zoom', 'focusMode', 'focusDistance', 'exposureMode', 'exposureTime', 'iso', 'whiteBalanceMode', 'colorTemperature']) {
+        if (bag[key] != null) settings[key] = bag[key];
+      }
+      if (constraints.width && constraints.width.exact) settings.width = constraints.width.exact;
+      if (constraints.height && constraints.height.exact) settings.height = constraints.height.exact;
+      return Promise.resolve();
+    };
+    track.getCapabilities = () => ({
+      zoom: { min: 1, max: 8, step: 0.1 },
+      width: { max: 1920 }, height: { max: 1080 },
+      focusMode: ['manual', 'continuous'],
+      focusDistance: { min: 0, max: 1 },
+      exposureMode: ['manual', 'continuous'],
+      exposureTime: { min: 0, max: 1 },
+      iso: { min: 50, max: 3200 },
+      whiteBalanceMode: ['manual', 'continuous'],
+      colorTemperature: { min: 2000, max: 8000 },
+    });
+    track.getSettings = () => ({ ...settings });
+    navigator.mediaDevices.getUserMedia = async () => { window.__gumCalls += 1; return stream; };
+    ensureOcrWorker = async () => (ocrWorker = ocrWorker || {});
+    recognizeCardSurfaces = async () => {
+      window.__recog = (window.__recog || 0) + 1;
+      return {
+        pending: { id: 'card-' + window.__recog, name: 'Carta ' + window.__recog, setName: 'Prueba', number: String(window.__recog), image: '' },
+        suggestions: [], nameResults: [], message: 'Confirma', debugText: '',
+      };
+    };
+    window.__shot = () => {
+      const video = document.getElementById('liveVideo');
+      const layer = document.getElementById('previewZoom');
+      const now = track.getSettings();
+      return {
+        node: video,
+        stream: video.srcObject,
+        vw: video.videoWidth,
+        vh: video.videoHeight,
+        layerW: layer.style.width,
+        layerH: layer.style.height,
+        layerL: layer.style.left,
+        layerT: layer.style.top,
+        transform: getComputedStyle(video).transform,
+        zoom: state.scan.zoom,
+        roi: JSON.stringify(state.scan.roiNum),
+        settings: { width: now.width, height: now.height, zoom: now.zoom, focusMode: now.focusMode, focusDistance: now.focusDistance, exposureMode: now.exposureMode, exposureTime: now.exposureTime, iso: now.iso },
+        calls: window.__constraintCalls.length,
+        gum: window.__gumCalls,
+        diag: document.getElementById('trackDiag').textContent,
+      };
+    };
+  });
+  await focusPage.click('#startLiveBtn');
+  await focusPage.waitForFunction(() => {
+    const diag = document.getElementById('trackDiag');
+    return diag && diag.textContent.includes('enfoque continuous');
+  }, { timeout: 10000 });
+  const opened = await focusPage.evaluate(() => {
+    const focusCalls = window.__constraintCalls.filter((call) => call.advanced && call.advanced[0] && call.advanced[0].focusMode);
+    return {
+      gum: window.__gumCalls,
+      focusCalls,
+      widthMixed: window.__constraintCalls.some((call) => call.width && call.advanced),
+    };
+  });
+  assert(opened.gum === 1, 'reabrió la cámara: ' + opened.gum);
+  assert(opened.focusCalls.length === 1 && opened.focusCalls[0].advanced[0].focusMode === 'continuous', 'no dejó el enfoque continuo una sola vez: ' + JSON.stringify(opened.focusCalls));
+  assert(!opened.focusCalls[0].width && !opened.focusCalls[0].advanced[0].zoom, 'el enfoque inicial tocó resolución o zoom');
+  assert(!opened.widthMixed, 'mezcló resolución y enfoque');
+  await focusPage.evaluate(() => {
+    window.__focusVideo = document.getElementById('liveVideo');
+    window.__focusStream = window.__focusVideo.srcObject;
+  });
+  await focusPage.waitForSelector('#captureAgainBtn', { timeout: 10000 });
+  await focusPage.evaluate(() => document.getElementById('captureAgainBtn').click());
+  await focusPage.waitForSelector('#confirmYesBtn', { timeout: 5000 });
+  const lockedSettings = await focusPage.evaluate(() => window.__shot().settings);
+  assert(lockedSettings.focusMode === 'manual' && lockedSettings.focusDistance === 0.12, 'no fijó la distancia de la carta: ' + JSON.stringify(lockedSettings));
+  assert(lockedSettings.exposureMode === 'manual' && lockedSettings.exposureTime === 0.008 && lockedSettings.iso === 200, 'no fijó la exposición: ' + JSON.stringify(lockedSettings));
+  await focusPage.evaluate(() => document.getElementById('confirmYesBtn').click());
+  await focusPage.waitForFunction(() => !document.getElementById('confirmYesBtn') && state.scan.recent.length === 1, { timeout: 5000 });
+  const afterFirst = await focusPage.evaluate(() => {
+    const shot = window.__shot();
+    shot.sameNode = shot.node === window.__focusVideo;
+    shot.sameStream = shot.stream === window.__focusStream;
+    delete shot.node; delete shot.stream;
+    return shot;
+  });
+  assert(afterFirst.sameNode && afterFirst.sameStream, 'el primer guardado cambió el vídeo');
+  assert(afterFirst.diag.includes('enfoque manual') && afterFirst.diag.includes('1920×1080'), 'el diagnóstico no muestra el track: ' + afterFirst.diag);
+  for (let cycle = 2; cycle <= 3; cycle++) {
+    const recogBefore = await focusPage.evaluate(() => window.__recog || 0);
+    const callsBefore = await focusPage.evaluate(() => window.__constraintCalls.length);
+    await focusPage.evaluate(() => captureAndRecognize());
+    const blocked = await focusPage.evaluate(() => ({ recog: window.__recog || 0, calls: window.__constraintCalls.length }));
+    assert(blocked.recog === recogBefore && blocked.calls === callsBefore, 'capturó un fotograma sin pulsar Capturar');
+    await focusPage.evaluate(() => document.getElementById('captureAgainBtn').click());
+    await focusPage.waitForSelector('#confirmYesBtn', { timeout: 5000 });
+    await focusPage.evaluate(() => document.getElementById('confirmYesBtn').click());
+    await focusPage.waitForFunction((n) => state.scan.recent.length === n && !document.getElementById('confirmYesBtn'), { timeout: 5000 }, cycle);
+    const next = await focusPage.evaluate(() => {
+      const shot = window.__shot();
+      shot.sameNode = shot.node === window.__focusVideo;
+      shot.sameStream = shot.stream === window.__focusStream;
+      delete shot.node; delete shot.stream;
+      return shot;
+    });
+    assert(JSON.stringify(next) === JSON.stringify(afterFirst), 'la carta ' + cycle + ' cambió el track o la vista: ' + JSON.stringify({ afterFirst, next }));
+  }
+  await focusPage.evaluate(() => applyCameraZoom(4));
+  const zoomed = await focusPage.evaluate(() => ({
+    last: window.__constraintCalls.at(-1).advanced[0],
+    settings: window.__shot().settings,
+  }));
+  assert(zoomed.last.zoom === 4 && zoomed.last.focusMode === 'manual' && zoomed.last.focusDistance === 0.12, 'el zoom soltó el enfoque: ' + JSON.stringify(zoomed.last));
+  assert(!zoomed.last.width && zoomed.settings.focusDistance === 0.12 && zoomed.settings.exposureMode === 'manual', 'el zoom cambió exposición o resolución');
+  console.log('preview-stable-ok', JSON.stringify({
+    openZoom: 3,
+    slider: zoomCalls.map((call) => call.advanced[0].zoom),
+    fallback: fallback.scale,
+    ignored: ignored.scale,
+    focusCycles: 3,
+    focus: 'simulated-track-only',
+  }));
 } finally {
   await browser.close();
   server.kill();

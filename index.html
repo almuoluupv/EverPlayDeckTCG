@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="album-build" content="2026.11.03.4">
+<meta name="album-build" content="2026.11.03.5">
 <title>Mi Álbum Pokémon</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -306,6 +306,7 @@
     transform:none;
   }
   .build-stamp{margin:10px 0 0;color:var(--muted);font-size:12px;text-align:center;}
+  .track-diag{margin:4px 0 0;color:var(--muted);font-size:11px;line-height:1.35;text-align:center;word-break:break-word;}
   .video-wrap video{
     width:100%; height:100%; object-fit:cover; object-position:center center; display:block;
     transform:none;
@@ -633,7 +634,7 @@ const state = {
 /* El catálogo sale de ./data/. El álbum usa la API solo con sesión y config.js
    relleno. Si falta la clave, la URL de la API o el login, se queda en localStorage. */
 
-const APP_BUILD = '2026.11.03.4';
+const APP_BUILD = '2026.11.03.5';
 const STORAGE_KEY = 'pokemon_album_collection_v1';
 let authListenerReady = false;
 let clerkFailed = false;
@@ -1850,16 +1851,11 @@ function extractRecognitionSignals(text){
   return out;
 }
 
-function queueLiveRecognitionFrame(delay = 3000){
+function queueLiveRecognitionFrame(){
   if(liveScanTimer){
     clearTimeout(liveScanTimer);
     liveScanTimer = null;
   }
-  if(!state.scan.liveActive) return;
-  liveScanTimer = setTimeout(() => {
-    liveScanTimer = null;
-    captureAndRecognize();
-  }, Math.max(0, delay));
 }
 
 function maybeNormalizeRecognitionResult(result){
@@ -1920,6 +1916,9 @@ let mediaStream = null;
 let ocrWorker = null;
 let cameraTrack = null;
 let liveBusy = false;
+let explicitCapture = false;
+let opticsPrimed = false;
+let opticsLock = null;
 
 async function startLiveScan(){
   if(state.scan.liveActive || state.scan.liveStatus === 'starting') return;
@@ -1937,6 +1936,10 @@ async function startLiveScan(){
   state.scan.zoomMax = 5;
   state.scan.zoomStep = 0.1;
   state.scan.hardwareZoom = false;
+  state.scan.trackDiag = '';
+  opticsPrimed = false;
+  opticsLock = null;
+  explicitCapture = false;
   state.scan.roi    = { x: 0.08, y: 0.05, w: 0.84, h: 0.90 };
   state.scan.roiNum = { x: 0.52, y: 0.84, w: 0.36, h: 0.09 };
   render();
@@ -1977,7 +1980,9 @@ async function startLiveScan(){
       });
     }
     await engageTrackZoom(cameraTrack);
+    await primeCameraOptics(cameraTrack);
     updateCameraZoomUI();
+    refreshTrackDiag(cameraTrack);
     render();
     await beginLiveRecognition();
   }catch(err){
@@ -2048,9 +2053,119 @@ function trackZoomNow(track){
   }
 }
 
-/* advanced primero; algunos móviles solo aceptan {zoom}. Nunca se toca la resolución. */
+function readTrackSettings(track){
+  try{ return (track && track.getSettings && track.getSettings()) || {}; }
+  catch{ return {}; }
+}
+
+function readTrackCaps(track){
+  try{ return (track && track.getCapabilities && track.getCapabilities()) || {}; }
+  catch{ return {}; }
+}
+
+function trackModes(cap){
+  return Array.isArray(cap) ? cap : [];
+}
+
+function opticsPayload(){
+  if(!opticsLock || opticsLock.none) return null;
+  const payload = {};
+  for(const [key, value] of Object.entries(opticsLock)){
+    if(key === 'none' || value == null || value === '') continue;
+    payload[key] = value;
+  }
+  return Object.keys(payload).length ? payload : null;
+}
+
+async function applyTrackBag(track, bag){
+  const clean = {};
+  for(const [key, value] of Object.entries(bag || {})){
+    if(value == null || value === '') continue;
+    if(typeof value === 'number' && !Number.isFinite(value)) continue;
+    clean[key] = value;
+  }
+  if(!Object.keys(clean).length || !track || !track.applyConstraints) return false;
+  try{
+    await track.applyConstraints({ advanced: [clean] });
+    return true;
+  }catch(e){
+    try{
+      await track.applyConstraints(clean);
+      return true;
+    }catch(err){
+      console.warn('No se pudieron fijar enfoque o exposición:', err);
+      return false;
+    }
+  }
+}
+
+/* Un solo modo continuo al abrir. No se repite al cambiar de carta. */
+async function primeCameraOptics(track){
+  if(!track || opticsPrimed) return;
+  opticsPrimed = true;
+  const caps = readTrackCaps(track);
+  const bag = {};
+  if(trackModes(caps.focusMode).includes('continuous')) bag.focusMode = 'continuous';
+  if(trackModes(caps.exposureMode).includes('continuous')) bag.exposureMode = 'continuous';
+  if(trackModes(caps.whiteBalanceMode).includes('continuous')) bag.whiteBalanceMode = 'continuous';
+  if(Object.keys(bag).length) await applyTrackBag(track, bag);
+}
+
+/* Al primer Capturar, con la carta todavía en el plano, se congela
+   la distancia y la exposición. Así el hueco vacío no reenfoca. */
+async function lockOpticsToCard(track){
+  if(!track || opticsLock) return;
+  const caps = readTrackCaps(track);
+  const settings = readTrackSettings(track);
+  const bag = {};
+  const distance = Number(settings.focusDistance);
+  if(trackModes(caps.focusMode).includes('manual') && Number.isFinite(distance)){
+    bag.focusMode = 'manual';
+    bag.focusDistance = distance;
+  }
+  const exposureTime = Number(settings.exposureTime);
+  const iso = Number(settings.iso);
+  if(trackModes(caps.exposureMode).includes('manual') && (Number.isFinite(exposureTime) || Number.isFinite(iso))){
+    bag.exposureMode = 'manual';
+    if(Number.isFinite(exposureTime)) bag.exposureTime = exposureTime;
+    if(Number.isFinite(iso)) bag.iso = iso;
+  }
+  const temperature = Number(settings.colorTemperature);
+  if(trackModes(caps.whiteBalanceMode).includes('manual') && Number.isFinite(temperature)){
+    bag.whiteBalanceMode = 'manual';
+    bag.colorTemperature = temperature;
+  }
+  if(!Object.keys(bag).length){
+    opticsLock = { none: true };
+    return;
+  }
+  const ok = await applyTrackBag(track, bag);
+  if(!ok) return;
+  const after = readTrackSettings(track);
+  opticsLock = {};
+  for(const key of Object.keys(bag)) opticsLock[key] = after[key] != null ? after[key] : bag[key];
+}
+
+function formatTrackDiag(track){
+  const settings = readTrackSettings(track);
+  const n = (value, digits) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
+  const mode = (value) => value ? String(value) : '—';
+  const distance = Number.isFinite(Number(settings.focusDistance)) ? ' ' + Number(settings.focusDistance).toFixed(2) : '';
+  return `Cámara ${n(settings.width, 0)}×${n(settings.height, 0)} · zoom ${n(settings.zoom, 1)} · enfoque ${mode(settings.focusMode)}${distance} · exposición ${mode(settings.exposureMode)}`;
+}
+
+function refreshTrackDiag(track){
+  const text = formatTrackDiag(track || cameraTrack);
+  state.scan.trackDiag = text;
+  const el = document.getElementById('trackDiag');
+  if(el) el.textContent = text;
+}
+
+/* advanced primero; algunos móviles solo aceptan {zoom}. Nunca se toca la resolución.
+   Si el enfoque ya está fijado, viaja en el mismo constraint para no soltarlo. */
 async function pushTrackZoom(track, zoom){
-  const shapes = [{ advanced: [{ zoom }] }, { zoom }];
+  const held = opticsPayload() || {};
+  const shapes = [{ advanced: [{ ...held, zoom }] }, { ...held, zoom }];
   for(const constraints of shapes){
     try{
       await track.applyConstraints(constraints);
@@ -2228,6 +2343,7 @@ async function beginLiveRecognition(){
 function stopLiveScan(){
   if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
   mediaStream=null; cameraTrack=null; liveBusy=false;
+  explicitCapture=false; opticsPrimed=false; opticsLock=null;
   if(liveScanTimer){ clearTimeout(liveScanTimer); liveScanTimer = null; }
   state.scan.liveActive=false; state.scan.livePhase='idle'; state.scan.liveStatus='idle';
   state.scan.liveMessage='Cámara detenida'; state.scan.liveError=''; state.scan.suggestions=[];
@@ -2556,7 +2672,15 @@ async function recognizeCardSurfaces({ numberBin, numberGray, nameBin, nameGray,
   return settleRecognition({ numberTexts, nameText, cardColor, onStatus, missHint });
 }
 
+function requestLiveCapture(){
+  if(liveBusy) return;
+  explicitCapture = true;
+  return captureAndRecognize();
+}
+
 async function captureAndRecognize(){
+  if(!explicitCapture) return;
+  explicitCapture = false;
   if(liveBusy) return;
   const video = document.getElementById('liveVideo');
   if(!video || video.readyState<2 || !video.videoWidth || !video.videoHeight || !ocrWorker){
@@ -2565,6 +2689,8 @@ async function captureAndRecognize(){
   liveBusy = true; state.scan.liveError = ''; state.scan.suggestions = [];
   const statusEl = document.getElementById('liveStatusText');
   try{
+    await lockOpticsToCard(cameraTrack);
+    refreshTrackDiag(cameraTrack);
     const numRoi = state.scan.roiNum;
     const roi = state.scan.roi;
     const nameRoi = { x: roi.x, y: roi.y, w: roi.w, h: roi.h * 0.15 };
@@ -2603,8 +2729,12 @@ function addScannedCard(card){
   state.scan.liveError='';
   state.scan.livePhase='scanning';
   state.scan.liveStatus='scanning';
-  state.scan.liveMessage='Listo. Ajusta los recuadros y pulsa Capturar.';
+  state.scan.liveMessage = opticsLock && opticsLock.focusMode === 'manual'
+    ? 'Enfoque fijado. Desliza la siguiente carta y pulsa Capturar.'
+    : 'Listo. Ajusta los recuadros y pulsa Capturar.';
   if(liveScanTimer){ clearTimeout(liveScanTimer); liveScanTimer=null; }
+  explicitCapture = false;
+  refreshTrackDiag(cameraTrack);
   render();
 }
 
@@ -2770,6 +2900,7 @@ function renderScanTabLive(modeRow){
     actions += `<button type="button" class="btn btn-primary" id="startLiveBtn" style="margin-top:12px">Iniciar cámara</button>`;
   }
   actions += `<p class="build-stamp" id="buildStamp">Versión ${APP_BUILD}</p>`;
+  actions += `<p class="track-diag" id="trackDiag">${escapeHtml(s.trackDiag || 'Cámara —')}</p>`;
   let confirm = '';
   if(s.pendingConfirm){
     confirm += confirmCardHTML(s.pendingConfirm, 'confirmYesBtn', 'confirmNoBtn');
@@ -3391,7 +3522,7 @@ function attachDynamicListeners(){
   }
   const captureAgainBtn = document.getElementById('captureAgainBtn');
   if(captureAgainBtn){
-    captureAgainBtn.addEventListener('click', ()=> captureAndRecognize());
+    captureAgainBtn.addEventListener('click', ()=> requestLiveCapture());
   }
   const adjustAgainBtn = document.getElementById('adjustAgainBtn');
   if(adjustAgainBtn){
