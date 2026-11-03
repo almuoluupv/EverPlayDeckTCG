@@ -64,8 +64,9 @@ try {
       height: { min: 240, max: 1080 },
     });
     track.getSettings = () => ({ width: 1280, height: 720, zoom: 1, focusMode: 'continuous' });
-    navigator.mediaDevices.getUserMedia = async () => {
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
       window.__gumCalls += 1;
+      window.__gumConstraints = constraints;
       return stream;
     };
     ensureOcrWorker = async () => ({});
@@ -114,10 +115,12 @@ try {
       hardware: state.scan.hardwareZoom,
       constraints: window.__constraintCalls,
       gum: window.__gumCalls,
+      open: window.__gumConstraints,
     };
   });
 
   assert(after.gum === 1, 'la cámara se abrió más de una vez: ' + after.gum);
+  assert(after.open && after.open.video && after.open.video.width && after.open.video.width.ideal === 1920 && after.open.video.height.ideal === 1080, 'la apertura no pidió 1920×1080: ' + JSON.stringify(after.open));
   assert(after.constraints.length === 0, 'se cambiaron constraints a mitad de encuadre: ' + JSON.stringify(after.constraints));
   assert(after.sameNode, 'Ajustar zona sustituyó el elemento de vídeo');
   assert(after.sameStream, 'el vídeo dejó de usar el mismo stream');
