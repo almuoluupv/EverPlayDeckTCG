@@ -1314,17 +1314,83 @@ function dct2d(input, N){
   return out;
 }
 
-/**
- * Calcula el pHash DCT-64 de un HTMLCanvasElement.
- * Devuelve string hex de 16 chars (64 bits).
- */
+/* El índice se calculó con sharp (Lanczos). Bajar a la mitad varias veces
+   y solo al final a 32×32 acerca el hash del navegador a ese índice. */
+function downscaleForPhash(canvas){
+  let cur = canvas;
+  while(cur.width > 64 || cur.height > 64){
+    const nxt = document.createElement('canvas');
+    nxt.width = Math.max(32, Math.round(cur.width / 2));
+    nxt.height = Math.max(32, Math.round(cur.height / 2));
+    const ctx = nxt.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(cur, 0, 0, nxt.width, nxt.height);
+    cur = nxt;
+  }
+  const tmp = document.createElement('canvas');
+  tmp.width = 32; tmp.height = 32;
+  const tctx = tmp.getContext('2d', { willReadFrequently: true });
+  tctx.imageSmoothingEnabled = true;
+  tctx.imageSmoothingQuality = 'high';
+  tctx.drawImage(cur, 0, 0, 32, 32);
+  return tctx.getImageData(0, 0, 32, 32);
+}
+
+/* Recorta el margen negro de la mesa alrededor de la carta. No toca el
+   recuadro del número: solo la imagen que se compara con el catálogo. */
+function measureCardContent(canvas, dark = 34){
+  if(!canvas?.width || !canvas?.height) return null;
+  const maxW = 160;
+  const scale = Math.min(1, maxW / canvas.width);
+  const w = Math.max(1, Math.round(canvas.width * scale));
+  const h = Math.max(1, Math.round(canvas.height * scale));
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const ctx = tmp.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(canvas, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  let minX = w, minY = h, maxX = -1, maxY = -1;
+  for(let y = 0; y < h; y++){
+    for(let x = 0; x < w; x++){
+      const i = (y * w + x) * 4;
+      const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      if(luma <= dark) continue;
+      if(x < minX) minX = x;
+      if(y < minY) minY = y;
+      if(x > maxX) maxX = x;
+      if(y > maxY) maxY = y;
+    }
+  }
+  if(maxX < 0) return null;
+  const fw = (maxX - minX + 1) / w;
+  const fh = (maxY - minY + 1) / h;
+  if(fw < 0.35 || fh < 0.35) return null;
+  if(fw > 0.96 && fh > 0.96) return null;
+  const aspect = (fw * canvas.width) / (fh * canvas.height);
+  if(aspect < 0.55 || aspect > 0.92) return null;
+  return { x: minX / w, y: minY / h, w: fw, h: fh };
+}
+
+function cropCanvasFraction(canvas, frac){
+  const sx = Math.max(0, Math.floor(frac.x * canvas.width));
+  const sy = Math.max(0, Math.floor(frac.y * canvas.height));
+  const sw = Math.max(1, Math.min(canvas.width - sx, Math.ceil(frac.w * canvas.width)));
+  const sh = Math.max(1, Math.min(canvas.height - sy, Math.ceil(frac.h * canvas.height)));
+  const out = document.createElement('canvas');
+  out.width = sw; out.height = sh;
+  out.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+  return out;
+}
+
+function cardCanvasForMatch(canvas){
+  const frac = measureCardContent(canvas);
+  return frac ? cropCanvasFraction(canvas, frac) : canvas;
+}
+
 function computePhashFromCanvas(canvas){
   const N=32, H=8;
-  // Redimensionar a 32×32 usando un canvas auxiliar
-  const tmp=document.createElement('canvas'); tmp.width=N; tmp.height=N;
-  const tctx=tmp.getContext('2d');
-  tctx.drawImage(canvas,0,0,N,N);
-  const px=tctx.getImageData(0,0,N,N).data;
+  const px=downscaleForPhash(canvas).data;
 
   // Escala de grises perceptual
   const gray=new Float64Array(N*N);
@@ -1392,7 +1458,7 @@ async function findByPhash(canvas, topN=5, maxDist=25, setId=''){
   if(!entries.length) return [];
 
   const cards = await ensureGlobalIndex();
-  const queryHash = computePhashFromCanvas(canvas);
+  const queryHash = computePhashFromCanvas(cardCanvasForMatch(canvas));
   const results = [];
   for(const [id, hash] of entries){
     const d = hammingDistance(queryHash, hash);
@@ -2330,7 +2396,18 @@ async function settleRecognition({ numberTexts, nameText, cardColor, onStatus, m
   let phashResults = [];
   if(cardColor){
     if(onStatus) onStatus('Comparando la imagen…');
-    try{ phashResults = await findByPhash(cardColor, 5, 22, detectedSetId); }
+    try{
+      const globalResults = await findByPhash(cardColor, 5, 22, '');
+      phashResults = globalResults;
+      // El código de set solo se usa si acerca más que el catálogo completo.
+      // Un código mal leído no puede tapar la carta que sí está en el marco.
+      if(detectedSetId){
+        const scoped = await findByPhash(cardColor, 5, 22, detectedSetId);
+        if(scoped.length && (!globalResults.length || scoped[0].distance <= globalResults[0].distance)){
+          phashResults = scoped;
+        }
+      }
+    }
     catch(e){ phashResults = []; }
     if(phashResults.length){
       const best = phashResults[0];
@@ -2349,11 +2426,16 @@ async function settleRecognition({ numberTexts, nameText, cardColor, onStatus, m
     };
   }
   if(phashResults.length && !byName.length){
-    if(phashResults[0].distance <= 10){
+    const best = phashResults[0];
+    const next = phashResults[1];
+    const gap = next ? next.distance - best.distance : 99;
+    // Distancia ≤ 10 y claramente por delante de la siguiente. Si hay
+    // empate, se enseña la lista: no se propone una carta dudosa.
+    if(best.distance <= 10 && gap >= 4){
       return {
         ...withHash,
-        pending: phashResults[0].card,
-        message: `👁 Reconocida visualmente (d=${phashResults[0].distance}). ¿Es esta?`,
+        pending: best.card,
+        message: `👁 Reconocida visualmente (d=${best.distance}). ¿Es esta?`,
       };
     }
     return {

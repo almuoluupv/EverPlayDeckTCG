@@ -10,7 +10,8 @@
     "dev:web": "node scripts/static-server.js",
     "dev:api": "node --env-file=.env api/server.js",
     "test": "node --test api/*.test.js",
-    "check:scanner": "node scripts/check-scanner.mjs"
+    "check:scanner": "node scripts/check-scanner.mjs",
+    "check:framed": "node scripts/check-framed-match.mjs"
   },
   "dependencies": {
     "@clerk/backend": "^2.29.0",
