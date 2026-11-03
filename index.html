@@ -300,7 +300,7 @@
     background: #000;
   }
   .preview-zoom{
-    width:100%; height:100%;
+    position:absolute; inset:0;
     transform:scale(var(--camera-display-zoom, 1));
     transform-origin:center center;
   }
@@ -582,8 +582,9 @@ const state = {
     liveError: '',
     livePhase: 'idle', // idle | adjust | scanning
     zoom: 1,
+    zoomHome: 3,
     zoomMin: 1,
-    zoomMax: 3,
+    zoomMax: 5,
     zoomStep: 0.1,
     hardwareZoom: false,
     roi: { x: 0.08, y: 0.08, w: 0.84, h: 0.82 },
@@ -1927,8 +1928,9 @@ async function startLiveScan(){
   state.scan.suggestions = [];
   state.scan.cooldownUntil = 0;
   state.scan.zoom = 1;
+  state.scan.zoomHome = 3;
   state.scan.zoomMin = 1;
-  state.scan.zoomMax = 3;
+  state.scan.zoomMax = 5;
   state.scan.zoomStep = 0.1;
   state.scan.hardwareZoom = false;
   state.scan.roi    = { x: 0.08, y: 0.05, w: 0.84, h: 0.90 };
@@ -1955,8 +1957,7 @@ async function startLiveScan(){
     });
     cameraTrack = mediaStream.getVideoTracks()[0] || null;
     if(!cameraTrack) throw new Error('El navegador no devolvió ninguna cámara.');
-    const openedClose = await configureCameraOnce(cameraTrack);
-    if(!openedClose) state.scan.zoom = 1.5;
+    await configureCameraOnce(cameraTrack);
 
     setupCameraZoom();
     state.scan.liveMessage = 'Cámara activa. Ajusta zoom y mueve el recuadro sobre el número…';
@@ -1981,46 +1982,75 @@ async function startLiveScan(){
   }
 }
 
-/* Una sola vez, justo al abrir: resolución máxima y un zoom moderado.
-   El deslizador no vuelve a tocar el track. */
+function closerZoom(min, max, step){
+  const s = step > 0 ? step : 0.1;
+  let z = Math.min(max, Math.max(min, 3));
+  if(z <= min) z = min + (max - min) * 0.6;
+  z = min + Math.round((z - min) / s) * s;
+  z = Math.min(max, Math.max(min, z));
+  return Number(z.toFixed(2));
+}
+
+/* Resolución una vez. Si hay zoom óptico, también un acercamiento inicial.
+   El deslizador solo cambia el zoom, nunca el tamaño del sensor. */
 async function configureCameraOnce(track){
-  try{
-    const caps = track.getCapabilities ? track.getCapabilities() : {};
-    const constraints = {};
-    const maxW = Number(caps && caps.width && caps.width.max);
-    const maxH = Number(caps && caps.height && caps.height.max);
-    if(Number.isFinite(maxW) && maxW >= 1) constraints.width = { exact: maxW };
-    if(Number.isFinite(maxH) && maxH >= 1) constraints.height = { exact: maxH };
-    const zMin = Number(caps && caps.zoom && caps.zoom.min);
-    const zMax = Number(caps && caps.zoom && caps.zoom.max);
-    let zoomed = false;
-    if(Number.isFinite(zMin) && Number.isFinite(zMax) && zMax > zMin){
-      const step = Number(caps.zoom.step) > 0 ? Number(caps.zoom.step) : 0.1;
-      const spanSteps = Math.max(1, Math.round((zMax - zMin) / step));
-      const startSteps = Math.max(1, Math.round(spanSteps * 0.35));
-      let z = zMin + startSteps * step;
-      z = Math.min(zMax, Math.max(zMin, z));
-      z = Number(z.toFixed(2));
-      constraints.advanced = [{ zoom: z }];
-      zoomed = true;
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  const maxW = Number(caps && caps.width && caps.width.max);
+  const maxH = Number(caps && caps.height && caps.height.max);
+  if(Number.isFinite(maxW) && Number.isFinite(maxH) && maxW >= 1 && maxH >= 1){
+    try{
+      await track.applyConstraints({ width: { exact: maxW }, height: { exact: maxH } });
+    }catch(e){
+      console.warn('No se pudo usar la resolución máxima de la cámara:', e);
     }
-    if(!Object.keys(constraints).length) return false;
-    await track.applyConstraints(constraints);
-    return zoomed;
-  }catch(e){
-    console.warn('No se pudo preparar la cámara:', e);
-    return false;
+  }
+  const zMin = Number(caps && caps.zoom && caps.zoom.min);
+  const zMax = Number(caps && caps.zoom && caps.zoom.max);
+  if(!(Number.isFinite(zMin) && Number.isFinite(zMax) && zMax > zMin)) return false;
+  const step = Number(caps.zoom && caps.zoom.step) > 0 ? Number(caps.zoom.step) : 0.1;
+  const start = closerZoom(zMin, zMax, step);
+  state.scan.hardwareZoom = true;
+  state.scan.zoomMin = zMin;
+  state.scan.zoomMax = zMax;
+  state.scan.zoomStep = step;
+  state.scan.zoomHome = start;
+  state.scan.zoom = start;
+  if(await pushTrackZoom(track, start)) return true;
+  state.scan.hardwareZoom = false;
+  return false;
+}
+
+function trackZoomNow(track){
+  try{
+    return Number(track.getSettings && track.getSettings().zoom);
+  }catch{
+    return NaN;
   }
 }
 
+/* advanced primero; algunos móviles solo aceptan {zoom}. Nunca se toca la resolución. */
+async function pushTrackZoom(track, zoom){
+  const shapes = [{ advanced: [{ zoom }] }, { zoom }];
+  for(const constraints of shapes){
+    try{
+      await track.applyConstraints(constraints);
+      const after = trackZoomNow(track);
+      if(!Number.isFinite(after) || Math.abs(after - zoom) <= 0.051) return true;
+    }catch(e){
+      console.warn('No se pudo aplicar el zoom de la cámara:', e);
+    }
+  }
+  return false;
+}
+
 function setupCameraZoom(){
-  // El zoom es solo visual. applyConstraints({zoom}) reinicia la cámara del
-  // móvil, baja la resolución y desplaza el encuadre.
+  if(state.scan.hardwareZoom) return;
   state.scan.hardwareZoom = false;
   state.scan.zoomMin = 1;
-  state.scan.zoomMax = 3;
+  state.scan.zoomMax = 5;
   state.scan.zoomStep = 0.1;
-  if(!Number.isFinite(state.scan.zoom) || state.scan.zoom < 1) state.scan.zoom = 1;
+  state.scan.zoomHome = 3;
+  state.scan.zoom = 3;
 }
 
 function bindLivePreview(video){
@@ -2037,14 +2067,18 @@ async function applyCameraZoom(value){
   let z=Math.max(min,Math.min(max,Number(value)||min));
   z=Number((Math.round(z/step)*step).toFixed(2));
   state.scan.zoom=z;
-  state.scan.hardwareZoom=false;
+  if(state.scan.hardwareZoom && cameraTrack && cameraTrack.applyConstraints){
+    const ok = await pushTrackZoom(cameraTrack, z);
+    if(!ok) state.scan.hardwareZoom=false;
+  }
   updateCameraZoomUI();
 }
 
 function updateCameraZoomUI(){
   const layer=document.getElementById('previewZoom');
   const range=document.getElementById('zoomRange'), value=document.getElementById('zoomValue');
-  if(layer) layer.style.setProperty('--camera-display-zoom', String(state.scan.zoom || 1));
+  const visual=state.scan.hardwareZoom ? 1 : (state.scan.zoom || 1);
+  if(layer) layer.style.setProperty('--camera-display-zoom', String(visual));
   if(range){ range.min=state.scan.zoomMin; range.max=state.scan.zoomMax; range.step=state.scan.zoomStep; range.value=state.scan.zoom; }
   if(value) value.textContent=`${state.scan.zoom.toFixed(1)}×`;
 }
@@ -2173,7 +2207,7 @@ function resetToAdjust(){
 function getVideoSourceRect(video){
   const vw=video.videoWidth,vh=video.videoHeight;
   const ew=video.clientWidth,eh=video.clientHeight;
-  const digitalZoom=Math.max(1, Number(state.scan.zoom)||1);
+  const digitalZoom=state.scan.hardwareZoom ? 1 : Math.max(1, Number(state.scan.zoom)||1);
   const scale=Math.max(ew/vw,eh/vh)*digitalZoom;
   const rw=vw*scale,rh=vh*scale;
   return {left:(ew-rw)/2,top:(eh-rh)/2,width:rw,height:rh};
@@ -3330,7 +3364,7 @@ function attachDynamicListeners(){
   }
   const resetZoomBtn = document.getElementById('resetZoomBtn');
   if(resetZoomBtn){
-    resetZoomBtn.addEventListener('click', ()=> applyCameraZoom(state.scan.zoomMin || 1));
+    resetZoomBtn.addEventListener('click', ()=> applyCameraZoom(state.scan.zoomHome || state.scan.zoomMin || 1));
   }
   document.querySelectorAll('[data-suggest-idx]').forEach(el=>{
     el.addEventListener('click', ()=>{
