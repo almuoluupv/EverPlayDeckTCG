@@ -119,6 +119,9 @@ try {
       inlineZoom: video.style.getPropertyValue('--camera-display-zoom'),
       layerZoom: document.getElementById('previewZoom').style.getPropertyValue('--camera-display-zoom'),
       layerTransform: getComputedStyle(document.getElementById('previewZoom')).transform,
+      layerRatio: document.getElementById('previewZoom').clientWidth / document.querySelector('.video-wrap').clientWidth,
+      build: document.querySelector('meta[name="album-build"]').content,
+      stamp: document.getElementById('buildStamp').textContent,
       hardware: state.scan.hardwareZoom,
       constraints: window.__constraintCalls,
       gum: window.__gumCalls,
@@ -142,6 +145,9 @@ try {
   assert(after.inlineZoom === '', 'el zoom volvió a escribir estilo en el vídeo');
   assert(after.hardware === true, 'no usó el zoom del track');
   assert(after.layerZoom === '1', 'el marco se escaló además del zoom del track: ' + after.layerZoom);
+  assert(after.layerRatio > 0.9 && after.layerRatio < 1.15, 'el marco no coincide con la vista: ' + after.layerRatio);
+  assert(after.layerTransform === 'none', 'el marco sigue usando transform: ' + after.layerTransform);
+  assert(after.build === '2026.11.03.3' && after.stamp.includes('2026.11.03.3'), 'falta la versión visible: ' + after.stamp);
   await page.click('#resetZoomBtn');
   const resetZoom = await page.evaluate(() => window.__constraintCalls.at(-1).advanced[0].zoom);
   assert(resetZoom === 3, 'restablecer no volvió al acercamiento inicial: ' + resetZoom);
@@ -168,19 +174,62 @@ try {
   await plain.click('#startLiveBtn');
   await plain.waitForFunction(() => document.getElementById('previewZoom'), { timeout: 10000 });
   await plain.evaluate(() => applyCameraZoom(4));
-  const fallback = await plain.evaluate(() => ({
-    scale: document.getElementById('previewZoom').style.getPropertyValue('--camera-display-zoom'),
-    transform: getComputedStyle(document.getElementById('previewZoom')).transform,
-    videoTransform: getComputedStyle(document.getElementById('liveVideo')).transform,
-    hardware: state.scan.hardwareZoom,
-    calls: window.__constraintCalls,
-  }));
+  const fallback = await plain.evaluate(() => {
+    const layer = document.getElementById('previewZoom');
+    const wrap = document.querySelector('.video-wrap');
+    return {
+      scale: layer.style.getPropertyValue('--camera-display-zoom'),
+      transform: getComputedStyle(layer).transform,
+      videoTransform: getComputedStyle(document.getElementById('liveVideo')).transform,
+      ratio: layer.clientWidth / wrap.clientWidth,
+      hardware: state.scan.hardwareZoom,
+      calls: window.__constraintCalls,
+    };
+  });
   assert(fallback.hardware === false, 'usó zoom de hardware sin capacidad');
   assert(fallback.scale === '4', 'el deslizador no actualizó la escala: ' + fallback.scale);
-  assert(fallback.transform.includes('4'), 'la escala no se aplicó al marco: ' + fallback.transform);
+  assert(fallback.ratio > 3.5 && fallback.ratio < 4.5, 'la escala no cambió el tamaño del marco: ' + fallback.ratio);
+  assert(fallback.transform === 'none', 'el marco usa transform: ' + fallback.transform);
   assert(fallback.videoTransform === 'none', 'se escaló el elemento de vídeo');
   assert(fallback.calls.every((call) => !call.advanced), 'sin zoom de track no debe pedir zoom: ' + JSON.stringify(fallback.calls));
-  console.log('preview-stable-ok', JSON.stringify({ openZoom: 3, slider: zoomCalls.map((call) => call.advanced[0].zoom), fallback: fallback.scale }));
+
+  const stuck = await browser.newPage();
+  await stuck.goto(origin + '/', { waitUntil: 'domcontentloaded', timeout: 20000 });
+  await stuck.waitForSelector('#startLiveBtn', { timeout: 15000 });
+  await stuck.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+    canvas.getContext('2d').fillRect(0, 0, 640, 480);
+    const stream = canvas.captureStream(8);
+    const track = stream.getVideoTracks()[0];
+    window.__constraintCalls = [];
+    track.applyConstraints = (constraints) => {
+      window.__constraintCalls.push(constraints);
+      return Promise.resolve();
+    };
+    track.getCapabilities = () => ({ zoom: { min: 1, max: 8, step: 0.1 }, width: { max: 1280 }, height: { max: 720 } });
+    track.getSettings = () => ({ width: 640, height: 480, zoom: 1 });
+    navigator.mediaDevices.getUserMedia = async () => stream;
+    ensureOcrWorker = async () => ({});
+  });
+  await stuck.click('#startLiveBtn');
+  await stuck.waitForFunction(() => document.getElementById('previewZoom'), { timeout: 10000 });
+  await stuck.evaluate(() => applyCameraZoom(4));
+  const ignored = await stuck.evaluate(() => {
+    const layer = document.getElementById('previewZoom');
+    return {
+      hardware: state.scan.hardwareZoom,
+      scale: layer.style.getPropertyValue('--camera-display-zoom'),
+      ratio: layer.clientWidth / document.querySelector('.video-wrap').clientWidth,
+      videoTransform: getComputedStyle(document.getElementById('liveVideo')).transform,
+    };
+  });
+  assert(ignored.hardware === false, 'aceptó un zoom que la cámara no confirmó');
+  assert(ignored.scale === '4', 'si el track no confirma, el deslizador no escala el marco: ' + ignored.scale);
+  assert(ignored.ratio > 3.5 && ignored.ratio < 4.5, 'el marco no creció: ' + ignored.ratio);
+  assert(ignored.videoTransform === 'none', 'se escaló el vídeo');
+  console.log('preview-stable-ok', JSON.stringify({ openZoom: 3, slider: zoomCalls.map((call) => call.advanced[0].zoom), fallback: fallback.scale, ignored: ignored.scale }));
 } finally {
   await browser.close();
   server.kill();

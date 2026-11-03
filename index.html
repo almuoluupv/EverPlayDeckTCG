@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="album-build" content="2026.11.03.3">
 <title>Mi Álbum Pokémon</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -300,12 +301,14 @@
     background: #000;
   }
   .preview-zoom{
-    position:absolute; inset:0;
-    transform:scale(var(--camera-display-zoom, 1));
-    transform-origin:center center;
+    position:absolute; left:0; top:0;
+    width:100%; height:100%;
+    transform:none;
   }
+  .build-stamp{margin:10px 0 0;color:var(--muted);font-size:12px;text-align:center;}
   .video-wrap video{
     width:100%; height:100%; object-fit:cover; object-position:center center; display:block;
+    transform:none;
   }
   .camera-adjust{
     margin-top:12px; padding:12px; border:1px solid var(--border);
@@ -630,6 +633,7 @@ const state = {
 /* El catálogo sale de ./data/. El álbum usa la API solo con sesión y config.js
    relleno. Si falta la clave, la URL de la API o el login, se queda en localStorage. */
 
+const APP_BUILD = '2026.11.03.3';
 const STORAGE_KEY = 'pokemon_album_collection_v1';
 let authListenerReady = false;
 let clerkFailed = false;
@@ -1965,6 +1969,14 @@ async function startLiveScan(){
     if(!video) throw new Error('No se pudo crear la vista de cámara.');
     bindLivePreview(video);
     await video.play().catch(()=>{});
+    if(video.readyState < 1){
+      await new Promise(resolve => {
+        const done = () => resolve();
+        video.addEventListener('loadedmetadata', done, { once: true });
+        setTimeout(done, 400);
+      });
+    }
+    await engageTrackZoom(cameraTrack);
     render();
     await beginLiveRecognition();
   }catch(err){
@@ -2004,20 +2016,27 @@ async function configureCameraOnce(track){
       console.warn('No se pudo usar la resolución máxima de la cámara:', e);
     }
   }
-  const zMin = Number(caps && caps.zoom && caps.zoom.min);
-  const zMax = Number(caps && caps.zoom && caps.zoom.max);
+  return engageTrackZoom(track);
+}
+
+/* El zoom del track solo cuenta si la cámara confirma el valor.
+   En Safari las capacidades a veces aparecen después del primer fotograma. */
+async function engageTrackZoom(track){
+  if(!track || !track.getCapabilities) return false;
+  const caps = track.getCapabilities() || {};
+  const zMin = Number(caps.zoom && caps.zoom.min);
+  const zMax = Number(caps.zoom && caps.zoom.max);
   if(!(Number.isFinite(zMin) && Number.isFinite(zMax) && zMax > zMin)) return false;
   const step = Number(caps.zoom && caps.zoom.step) > 0 ? Number(caps.zoom.step) : 0.1;
   const start = closerZoom(zMin, zMax, step);
-  state.scan.hardwareZoom = true;
   state.scan.zoomMin = zMin;
   state.scan.zoomMax = zMax;
   state.scan.zoomStep = step;
   state.scan.zoomHome = start;
-  state.scan.zoom = start;
-  if(await pushTrackZoom(track, start)) return true;
-  state.scan.hardwareZoom = false;
-  return false;
+  if(!state.scan.hardwareZoom) state.scan.zoom = start;
+  const ok = await pushTrackZoom(track, state.scan.zoom);
+  state.scan.hardwareZoom = ok;
+  return ok;
 }
 
 function trackZoomNow(track){
@@ -2035,7 +2054,7 @@ async function pushTrackZoom(track, zoom){
     try{
       await track.applyConstraints(constraints);
       const after = trackZoomNow(track);
-      if(!Number.isFinite(after) || Math.abs(after - zoom) <= 0.051) return true;
+      if(Number.isFinite(after) && Math.abs(after - zoom) <= 0.051) return true;
     }catch(e){
       console.warn('No se pudo aplicar el zoom de la cámara:', e);
     }
@@ -2078,7 +2097,21 @@ function updateCameraZoomUI(){
   const layer=document.getElementById('previewZoom');
   const range=document.getElementById('zoomRange'), value=document.getElementById('zoomValue');
   const visual=state.scan.hardwareZoom ? 1 : (state.scan.zoom || 1);
-  if(layer) layer.style.setProperty('--camera-display-zoom', String(visual));
+  if(layer){
+    layer.style.setProperty('--camera-display-zoom', String(visual));
+    layer.style.transform='none';
+    const wrap=layer.closest('.video-wrap');
+    if(wrap && wrap.clientWidth && wrap.clientHeight){
+      const w=wrap.clientWidth*visual, h=wrap.clientHeight*visual;
+      layer.style.width=w+'px';
+      layer.style.height=h+'px';
+      layer.style.left=((wrap.clientWidth-w)/2)+'px';
+      layer.style.top=((wrap.clientHeight-h)/2)+'px';
+    }else if(layer.dataset.zoomRetry!=='1'){
+      layer.dataset.zoomRetry='1';
+      requestAnimationFrame(()=>updateCameraZoomUI());
+    }
+  }
   if(range){ range.min=state.scan.zoomMin; range.max=state.scan.zoomMax; range.step=state.scan.zoomStep; range.value=state.scan.zoom; }
   if(value) value.textContent=`${state.scan.zoom.toFixed(1)}×`;
 }
@@ -2204,9 +2237,16 @@ function resetToAdjust(){
   render();
 }
 
+function previewFrame(video){
+  const wrap=video.closest('.video-wrap');
+  if(wrap && wrap.clientWidth && wrap.clientHeight) return {w:wrap.clientWidth,h:wrap.clientHeight};
+  return {w:video.clientWidth,h:video.clientHeight};
+}
+
 function getVideoSourceRect(video){
   const vw=video.videoWidth,vh=video.videoHeight;
-  const ew=video.clientWidth,eh=video.clientHeight;
+  const frame=previewFrame(video);
+  const ew=frame.w,eh=frame.h;
   const digitalZoom=state.scan.hardwareZoom ? 1 : Math.max(1, Number(state.scan.zoom)||1);
   const scale=Math.max(ew/vw,eh/vh)*digitalZoom;
   const rw=vw*scale,rh=vh*scale;
@@ -2286,7 +2326,8 @@ function cropVideoCanvas(video, roi, { scaleUp=true } = {}){
   if(!roi) roi=state.scan.roi;
   const vw=video.videoWidth, vh=video.videoHeight;
   const display=getVideoSourceRect(video);
-  const box={x:roi.x*video.clientWidth,y:roi.y*video.clientHeight,w:roi.w*video.clientWidth,h:roi.h*video.clientHeight};
+  const frame=previewFrame(video);
+  const box={x:roi.x*frame.w,y:roi.y*frame.h,w:roi.w*frame.w,h:roi.h*frame.h};
   const ix=Math.max(box.x,display.left), iy=Math.max(box.y,display.top);
   const ax=Math.min(box.x+box.w,display.left+display.width), ay=Math.min(box.y+box.h,display.top+display.height);
   const sx=Math.max(0,Math.round((ix-display.left)/display.width*vw));
@@ -2718,6 +2759,7 @@ function renderScanTabLive(modeRow){
   } else {
     actions += `<button type="button" class="btn btn-primary" id="startLiveBtn" style="margin-top:12px">Iniciar cámara</button>`;
   }
+  actions += `<p class="build-stamp" id="buildStamp">Versión ${APP_BUILD}</p>`;
   let confirm = '';
   if(s.pendingConfirm){
     confirm += confirmCardHTML(s.pendingConfirm, 'confirmYesBtn', 'confirmNoBtn');
