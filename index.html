@@ -301,9 +301,6 @@
   }
   .video-wrap video{
     width:100%; height:100%; object-fit:cover; object-position:center center; display:block;
-    transform:scale(var(--camera-display-zoom, 1));
-    transform-origin:center center;
-    transition:transform .12s ease-out;
   }
   .camera-adjust{
     margin-top:12px; padding:12px; border:1px solid var(--border);
@@ -1987,15 +1984,9 @@ function bindLivePreview(video){
   if(!video || !mediaStream) return;
   video.muted = true;
   video.playsInline = true;
-  if(video.srcObject !== mediaStream) video.srcObject = mediaStream;
+  if(video.srcObject === mediaStream) return;
+  video.srcObject = mediaStream;
   if(video.paused) video.play().catch(()=>{});
-}
-
-function preserveLiveVideo(){
-  const existing = document.getElementById('liveVideo');
-  if(!existing || existing.srcObject !== mediaStream) return null;
-  existing.remove();
-  return existing;
 }
 
 async function applyCameraZoom(value){
@@ -2008,8 +1999,7 @@ async function applyCameraZoom(value){
 }
 
 function updateCameraZoomUI(){
-  const video=document.getElementById('liveVideo'), range=document.getElementById('zoomRange'), value=document.getElementById('zoomValue');
-  if(video) video.style.setProperty('--camera-display-zoom', state.scan.hardwareZoom?'1':String(state.scan.zoom));
+  const range=document.getElementById('zoomRange'), value=document.getElementById('zoomValue');
   if(range){ range.min=state.scan.zoomMin; range.max=state.scan.zoomMax; range.step=state.scan.zoomStep; range.value=state.scan.zoom; }
   if(value) value.textContent=`${state.scan.zoom.toFixed(1)}×`;
 }
@@ -2138,12 +2128,7 @@ function resetToAdjust(){
 function getVideoSourceRect(video){
   const vw=video.videoWidth,vh=video.videoHeight;
   const ew=video.clientWidth,eh=video.clientHeight;
-  const baseScale=Math.max(ew/vw,eh/vh);
-  // Si el navegador no ofrece zoom real, el vídeo se amplía con CSS.
-  // La captura debe usar exactamente la misma transformación para que el
-  // recuadro que ve el usuario corresponda al píxel que recibe el OCR.
-  const digitalZoom=state.scan.hardwareZoom?1:Math.max(1,Number(state.scan.zoom)||1);
-  const scale=baseScale*digitalZoom;
+  const scale=Math.max(ew/vw,eh/vh);
   const rw=vw*scale,rh=vh*scale;
   return {left:(ew-rw)/2,top:(eh-rh)/2,width:rw,height:rh};
 }
@@ -2609,7 +2594,6 @@ function renderScanTab(){
 
 function renderScanTabLive(modeRow){
   const s = state.scan;
-  const keptVideo = s.liveActive ? preserveLiveVideo() : null;
   const statusLine = (!s.liveActive || s.livePhase !== 'scanning')
     ? 'Encaja el número abajo a la izquierda'
     : (s.liveMessage || 'Leyendo el número…');
@@ -2622,7 +2606,7 @@ function renderScanTabLive(modeRow){
         <div id="roiNum" class="roi-num"><div id="roiNumResize" class="roi-num-resize"></div></div>
       </div>
       <div class="live-status"><span class="dot"></span><span id="liveStatusText">${escapeHtml(statusLine)}</span></div>
-      ${s.liveError ? `<p class="account-note bad">${escapeHtml(s.liveError)}</p>` : ''}
+      ${s.liveError ? `<p id="liveErrorNote" class="account-note bad">${escapeHtml(s.liveError)}</p>` : ''}
     </div>`;
   } else {
     stage = `<div class="card-box"><p class="hint" style="margin-top:0">Encaja el número abajo a la izquierda.</p></div>`;
@@ -2680,11 +2664,30 @@ function renderScanTabLive(modeRow){
     recent = `<h2 class="section-title">Añadidas en esta sesión</h2>
       <div class="result-grid">${s.recent.map(c=>`<div class="result-card" style="cursor:default"><img src="${c.image}" alt="${escapeHtml(c.name)}" loading="lazy"><div class="rname">${escapeHtml(c.name)}</div><div class="rset">${escapeHtml(c.setName || '')}</div></div>`).join('')}</div>`;
   }
-  document.getElementById('main').innerHTML = `${modeRow}<div class="scan-layout"><div class="scan-stage">${stage}</div><div class="scan-side">${actions}${confirm}</div></div>${recent}`;
+  const video = document.getElementById('liveVideo');
+  const side = document.getElementById('scanSide');
+  const recentHost = document.getElementById('scanRecent');
+  const status = document.getElementById('liveStatusText');
+  if(s.liveActive && video && side && recentHost && status && video.srcObject === mediaStream){
+    side.innerHTML = actions + confirm;
+    recentHost.innerHTML = recent;
+    status.textContent = statusLine;
+    let err = document.getElementById('liveErrorNote');
+    if(s.liveError){
+      if(!err){
+        err = document.createElement('p');
+        err.id = 'liveErrorNote';
+        err.className = 'account-note bad';
+        status.parentElement.insertAdjacentElement('afterend', err);
+      }
+      err.textContent = s.liveError;
+    }else if(err) err.remove();
+    updateCameraZoomUI();
+    return;
+  }
+  document.getElementById('main').innerHTML = `${modeRow}<div class="scan-layout"><div class="scan-stage">${stage}</div><div class="scan-side" id="scanSide">${actions}${confirm}</div></div><div id="scanRecent">${recent}</div>`;
   if(s.liveActive){
-    const slot = document.getElementById('liveVideo');
-    if(keptVideo && slot) slot.replaceWith(keptVideo);
-    else bindLivePreview(slot);
+    bindLivePreview(document.getElementById('liveVideo'));
     updateCameraZoomUI();
     updateRoiUI();
     attachRoiDrag();

@@ -80,9 +80,14 @@ try {
   const before = await page.evaluate(() => {
     window.__preview = document.getElementById('liveVideo');
     window.__stream = window.__preview.srcObject;
+    const box = window.__preview.getBoundingClientRect();
+    const css = getComputedStyle(window.__preview);
     return {
       width: window.__preview.videoWidth,
       height: window.__preview.videoHeight,
+      box: { x: box.x, y: box.y, w: box.width, h: box.height },
+      fit: css.objectFit,
+      transform: css.transform,
     };
   });
 
@@ -95,12 +100,17 @@ try {
 
   const after = await page.evaluate(() => {
     const video = document.getElementById('liveVideo');
+    const box = video.getBoundingClientRect();
+    const css = getComputedStyle(video);
     return {
       sameNode: video === window.__preview,
       sameStream: video.srcObject === window.__stream,
       width: video.videoWidth,
       height: video.videoHeight,
-      zoom: video.style.getPropertyValue('--camera-display-zoom'),
+      box: { x: box.x, y: box.y, w: box.width, h: box.height },
+      fit: css.objectFit,
+      transform: css.transform,
+      inlineZoom: video.style.getPropertyValue('--camera-display-zoom'),
       hardware: state.scan.hardwareZoom,
       constraints: window.__constraintCalls,
       gum: window.__gumCalls,
@@ -112,7 +122,11 @@ try {
   assert(after.sameNode, 'Ajustar zona sustituyó el elemento de vídeo');
   assert(after.sameStream, 'el vídeo dejó de usar el mismo stream');
   assert(after.width === before.width && after.height === before.height, 'cambió la resolución: ' + JSON.stringify({ before, after }));
-  assert(after.zoom === '1.5', 'el zoom visual no se aplicó: ' + after.zoom);
+  assert(after.fit === before.fit && after.fit === 'cover', 'cambió object-fit: ' + after.fit);
+  assert(after.transform === 'none' && before.transform === 'none', 'el vídeo sigue teniendo transform: ' + after.transform);
+  assert(after.inlineZoom === '', 'el zoom volvió a escribir estilo en el vídeo');
+  const moved = ['x', 'y', 'w', 'h'].some((key) => Math.abs(after.box[key] - before.box[key]) > 0.5);
+  assert(!moved, 'el preview se movió: ' + JSON.stringify({ before: before.box, after: after.box }));
   assert(after.hardware === false, 'el zoom volvió a pedir zoom de hardware');
   console.log('preview-stable-ok', JSON.stringify({ before, after: { ...after, constraints: after.constraints.length } }));
 } finally {
