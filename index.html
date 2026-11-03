@@ -300,7 +300,7 @@
     background: #000;
   }
   .video-wrap video{
-    width:100%; height:100%; object-fit:cover; display:block;
+    width:100%; height:100%; object-fit:cover; object-position:center center; display:block;
     transform:scale(var(--camera-display-zoom, 1));
     transform-origin:center center;
     transition:transform .12s ease-out;
@@ -1944,44 +1944,19 @@ async function startLiveScan(){
 
   try{
     mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: 30, max: 30 }
-      },
+      video: { facingMode: { ideal: 'environment' } },
       audio: false
     });
     cameraTrack = mediaStream.getVideoTracks()[0] || null;
     if(!cameraTrack) throw new Error('El navegador no devolvió ninguna cámara.');
 
     setupCameraZoom();
-    try{
-      const caps = cameraTrack.getCapabilities ? cameraTrack.getCapabilities() : {};
-      if(caps.focusMode && Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')){
-        await cameraTrack.applyConstraints({advanced:[{focusMode:'continuous'}]});
-      }
-    }catch(e){ console.warn('No se pudo fijar enfoque continuo:', e); }
-
     state.scan.liveMessage = 'Cámara activa. Ajusta zoom y mueve el recuadro sobre el número…';
     const video = document.getElementById('liveVideo');
     if(!video) throw new Error('No se pudo crear la vista de cámara.');
-    video.srcObject = mediaStream;
-    video.muted = true;
-    video.playsInline = true;
+    bindLivePreview(video);
     await video.play().catch(()=>{});
     render();
-    requestAnimationFrame(()=>{
-      const finalVideo = document.getElementById('liveVideo');
-      if(finalVideo){
-        finalVideo.srcObject = mediaStream;
-        finalVideo.muted = true;
-        finalVideo.playsInline = true;
-        finalVideo.play().catch(()=>{});
-        updateCameraZoomUI();
-        updateRoiUI();
-      }
-    });
     await beginLiveRecognition();
   }catch(err){
     console.error('Error al iniciar cámara:', err);
@@ -1999,21 +1974,28 @@ async function startLiveScan(){
 }
 
 function setupCameraZoom(){
-  const track=cameraTrack;
-  if(!track) return;
-  try{
-    const caps=track.getCapabilities?track.getCapabilities():{};
-    if(caps.zoom && Number.isFinite(caps.zoom.min) && Number.isFinite(caps.zoom.max)){
-      state.scan.hardwareZoom=true;
-      state.scan.zoomMin=Math.max(1,Number(caps.zoom.min));
-      state.scan.zoomMax=Math.max(state.scan.zoomMin,Math.min(5,Number(caps.zoom.max)));
-      state.scan.zoomStep=Number(caps.zoom.step)||0.1;
-      const settings=track.getSettings?track.getSettings():{};
-      state.scan.zoom=Number.isFinite(settings.zoom)?Number(settings.zoom):state.scan.zoomMin;
-    }else{
-      state.scan.hardwareZoom=false; state.scan.zoomMin=1; state.scan.zoomMax=3; state.scan.zoomStep=0.1; state.scan.zoom=1;
-    }
-  }catch(e){ state.scan.hardwareZoom=false; state.scan.zoomMin=1; state.scan.zoomMax=3; state.scan.zoomStep=0.1; state.scan.zoom=1; }
+  // El zoom es solo visual. applyConstraints({zoom}) reinicia la cámara del
+  // móvil, baja la resolución y desplaza el encuadre.
+  state.scan.hardwareZoom = false;
+  state.scan.zoomMin = 1;
+  state.scan.zoomMax = 3;
+  state.scan.zoomStep = 0.1;
+  if(!Number.isFinite(state.scan.zoom) || state.scan.zoom < 1) state.scan.zoom = 1;
+}
+
+function bindLivePreview(video){
+  if(!video || !mediaStream) return;
+  video.muted = true;
+  video.playsInline = true;
+  if(video.srcObject !== mediaStream) video.srcObject = mediaStream;
+  if(video.paused) video.play().catch(()=>{});
+}
+
+function preserveLiveVideo(){
+  const existing = document.getElementById('liveVideo');
+  if(!existing || existing.srcObject !== mediaStream) return null;
+  existing.remove();
+  return existing;
 }
 
 async function applyCameraZoom(value){
@@ -2021,10 +2003,7 @@ async function applyCameraZoom(value){
   let z=Math.max(min,Math.min(max,Number(value)||min));
   z=Number((Math.round(z/step)*step).toFixed(2));
   state.scan.zoom=z;
-  if(state.scan.hardwareZoom && cameraTrack?.applyConstraints){
-    try{ await cameraTrack.applyConstraints({advanced:[{zoom:z}]}); }
-    catch(e){ console.warn('No se pudo aplicar zoom de cámara:',e); state.scan.hardwareZoom=false; }
-  }
+  state.scan.hardwareZoom=false;
   updateCameraZoomUI();
 }
 
@@ -2154,11 +2133,6 @@ function resetToAdjust(){
   state.scan.liveMessage='Ajusta los recuadros y pulsa Capturar.';
   state.scan.liveText=''; state.scan.liveError=''; state.scan.suggestions=[];
   render();
-  requestAnimationFrame(()=>{
-    const v=document.getElementById('liveVideo');
-    if(v && mediaStream){v.srcObject=mediaStream;v.play().catch(()=>{});}
-    updateCameraZoomUI(); updateRoiUI(); attachRoiDrag();
-  });
 }
 
 function getVideoSourceRect(video){
@@ -2635,6 +2609,7 @@ function renderScanTab(){
 
 function renderScanTabLive(modeRow){
   const s = state.scan;
+  const keptVideo = s.liveActive ? preserveLiveVideo() : null;
   const statusLine = (!s.liveActive || s.livePhase !== 'scanning')
     ? 'Encaja el número abajo a la izquierda'
     : (s.liveMessage || 'Leyendo el número…');
@@ -2707,11 +2682,12 @@ function renderScanTabLive(modeRow){
   }
   document.getElementById('main').innerHTML = `${modeRow}<div class="scan-layout"><div class="scan-stage">${stage}</div><div class="scan-side">${actions}${confirm}</div></div>${recent}`;
   if(s.liveActive){
-    requestAnimationFrame(()=>{
-      const v = document.getElementById('liveVideo');
-      if(v && mediaStream){ v.srcObject = mediaStream; v.play().catch(()=>{}); }
-      updateCameraZoomUI(); updateRoiUI(); attachRoiDrag();
-    });
+    const slot = document.getElementById('liveVideo');
+    if(keptVideo && slot) slot.replaceWith(keptVideo);
+    else bindLivePreview(slot);
+    updateCameraZoomUI();
+    updateRoiUI();
+    attachRoiDrag();
   }
 }
 
@@ -3229,10 +3205,7 @@ function render(){
   attachDynamicListeners();
   if(state.tab === 'scan' && state.scan.mode === 'live' && state.scan.liveActive){
     const video = document.getElementById('liveVideo');
-    if(video && video.srcObject !== mediaStream){
-      video.srcObject = mediaStream;
-      video.play().catch(()=>{});
-    }
+    bindLivePreview(video);
   }
 }
 
