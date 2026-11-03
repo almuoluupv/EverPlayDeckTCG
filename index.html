@@ -1943,13 +1943,14 @@ async function startLiveScan(){
     mediaStream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: 'environment' },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
+        width: { ideal: 3840 },
+        height: { ideal: 2160 }
       },
       audio: false
     });
     cameraTrack = mediaStream.getVideoTracks()[0] || null;
     if(!cameraTrack) throw new Error('El navegador no devolvió ninguna cámara.');
+    await raiseToMaxResolutionOnce(cameraTrack);
 
     setupCameraZoom();
     state.scan.liveMessage = 'Cámara activa. Ajusta zoom y mueve el recuadro sobre el número…';
@@ -1971,6 +1972,19 @@ async function startLiveScan(){
     else if(err?.name==='NotReadableError') state.scan.liveError='La cámara está siendo usada por otra aplicación o pestaña. Ciérrala y vuelve a intentarlo.';
     else state.scan.liveError='No se pudo iniciar la cámara: '+(err?.message||err?.name||'error desconocido');
     render();
+  }
+}
+
+/* Una sola vez, justo al abrir. Zoom y Ajustar zona no vuelven a llamar. */
+async function raiseToMaxResolutionOnce(track){
+  try{
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    const maxW = Number(caps && caps.width && caps.width.max);
+    const maxH = Number(caps && caps.height && caps.height.max);
+    if(!Number.isFinite(maxW) || !Number.isFinite(maxH) || maxW < 1 || maxH < 1) return;
+    await track.applyConstraints({ width: { exact: maxW }, height: { exact: maxH } });
+  }catch(e){
+    console.warn('No se pudo usar la resolución máxima de la cámara:', e);
   }
 }
 

@@ -120,8 +120,9 @@ try {
   });
 
   assert(after.gum === 1, 'la cámara se abrió más de una vez: ' + after.gum);
-  assert(after.open && after.open.video && after.open.video.width && after.open.video.width.ideal === 1920 && after.open.video.height.ideal === 1080, 'la apertura no pidió 1920×1080: ' + JSON.stringify(after.open));
-  assert(after.constraints.length === 0, 'se cambiaron constraints a mitad de encuadre: ' + JSON.stringify(after.constraints));
+  assert(after.open && after.open.video && after.open.video.width && after.open.video.width.ideal === 3840 && after.open.video.height.ideal === 2160, 'la apertura no pidió 3840×2160: ' + JSON.stringify(after.open));
+  assert(after.constraints.length === 1, 'la resolución máxima no se aplicó una sola vez: ' + JSON.stringify(after.constraints));
+  assert(after.constraints[0].width.exact === 1920 && after.constraints[0].height.exact === 1080, 'no se pidió el máximo del track: ' + JSON.stringify(after.constraints[0]));
   assert(after.sameNode, 'Ajustar zona sustituyó el elemento de vídeo');
   assert(after.sameStream, 'el vídeo dejó de usar el mismo stream');
   assert(after.width === before.width && after.height === before.height, 'cambió la resolución: ' + JSON.stringify({ before, after }));
