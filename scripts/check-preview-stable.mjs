@@ -112,6 +112,8 @@ try {
       fit: css.objectFit,
       transform: css.transform,
       inlineZoom: video.style.getPropertyValue('--camera-display-zoom'),
+      layerZoom: document.getElementById('previewZoom').style.getPropertyValue('--camera-display-zoom'),
+      layerTransform: getComputedStyle(document.getElementById('previewZoom')).transform,
       hardware: state.scan.hardwareZoom,
       constraints: window.__constraintCalls,
       gum: window.__gumCalls,
@@ -121,16 +123,17 @@ try {
 
   assert(after.gum === 1, 'la cámara se abrió más de una vez: ' + after.gum);
   assert(after.open && after.open.video && after.open.video.width && after.open.video.width.ideal === 3840 && after.open.video.height.ideal === 2160, 'la apertura no pidió 3840×2160: ' + JSON.stringify(after.open));
-  assert(after.constraints.length === 1, 'la resolución máxima no se aplicó una sola vez: ' + JSON.stringify(after.constraints));
+  assert(after.constraints.length === 1, 'la cámara se reconfiguró más de una vez: ' + JSON.stringify(after.constraints));
   assert(after.constraints[0].width.exact === 1920 && after.constraints[0].height.exact === 1080, 'no se pidió el máximo del track: ' + JSON.stringify(after.constraints[0]));
+  assert(after.constraints[0].advanced && after.constraints[0].advanced[0].zoom === 3.5, 'el zoom de apertura no es el moderado: ' + JSON.stringify(after.constraints[0]));
   assert(after.sameNode, 'Ajustar zona sustituyó el elemento de vídeo');
   assert(after.sameStream, 'el vídeo dejó de usar el mismo stream');
   assert(after.width === before.width && after.height === before.height, 'cambió la resolución: ' + JSON.stringify({ before, after }));
   assert(after.fit === before.fit && after.fit === 'cover', 'cambió object-fit: ' + after.fit);
   assert(after.transform === 'none' && before.transform === 'none', 'el vídeo sigue teniendo transform: ' + after.transform);
   assert(after.inlineZoom === '', 'el zoom volvió a escribir estilo en el vídeo');
-  const moved = ['x', 'y', 'w', 'h'].some((key) => Math.abs(after.box[key] - before.box[key]) > 0.5);
-  assert(!moved, 'el preview se movió: ' + JSON.stringify({ before: before.box, after: after.box }));
+  assert(after.layerZoom === '1.5', 'el deslizador no amplió el marco: ' + after.layerZoom);
+  assert(after.layerTransform !== 'none', 'la ampliación no está en el marco');
   assert(after.hardware === false, 'el zoom volvió a pedir zoom de hardware');
   console.log('preview-stable-ok', JSON.stringify({ before, after: { ...after, constraints: after.constraints.length } }));
 } finally {

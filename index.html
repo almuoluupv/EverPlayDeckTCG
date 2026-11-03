@@ -299,6 +299,11 @@
     overflow: hidden;
     background: #000;
   }
+  .preview-zoom{
+    width:100%; height:100%;
+    transform:scale(var(--camera-display-zoom, 1));
+    transform-origin:center center;
+  }
   .video-wrap video{
     width:100%; height:100%; object-fit:cover; object-position:center center; display:block;
   }
@@ -1950,7 +1955,8 @@ async function startLiveScan(){
     });
     cameraTrack = mediaStream.getVideoTracks()[0] || null;
     if(!cameraTrack) throw new Error('El navegador no devolvió ninguna cámara.');
-    await raiseToMaxResolutionOnce(cameraTrack);
+    const openedClose = await configureCameraOnce(cameraTrack);
+    if(!openedClose) state.scan.zoom = 1.5;
 
     setupCameraZoom();
     state.scan.liveMessage = 'Cámara activa. Ajusta zoom y mueve el recuadro sobre el número…';
@@ -1975,16 +1981,35 @@ async function startLiveScan(){
   }
 }
 
-/* Una sola vez, justo al abrir. Zoom y Ajustar zona no vuelven a llamar. */
-async function raiseToMaxResolutionOnce(track){
+/* Una sola vez, justo al abrir: resolución máxima y un zoom moderado.
+   El deslizador no vuelve a tocar el track. */
+async function configureCameraOnce(track){
   try{
     const caps = track.getCapabilities ? track.getCapabilities() : {};
+    const constraints = {};
     const maxW = Number(caps && caps.width && caps.width.max);
     const maxH = Number(caps && caps.height && caps.height.max);
-    if(!Number.isFinite(maxW) || !Number.isFinite(maxH) || maxW < 1 || maxH < 1) return;
-    await track.applyConstraints({ width: { exact: maxW }, height: { exact: maxH } });
+    if(Number.isFinite(maxW) && maxW >= 1) constraints.width = { exact: maxW };
+    if(Number.isFinite(maxH) && maxH >= 1) constraints.height = { exact: maxH };
+    const zMin = Number(caps && caps.zoom && caps.zoom.min);
+    const zMax = Number(caps && caps.zoom && caps.zoom.max);
+    let zoomed = false;
+    if(Number.isFinite(zMin) && Number.isFinite(zMax) && zMax > zMin){
+      const step = Number(caps.zoom.step) > 0 ? Number(caps.zoom.step) : 0.1;
+      const spanSteps = Math.max(1, Math.round((zMax - zMin) / step));
+      const startSteps = Math.max(1, Math.round(spanSteps * 0.35));
+      let z = zMin + startSteps * step;
+      z = Math.min(zMax, Math.max(zMin, z));
+      z = Number(z.toFixed(2));
+      constraints.advanced = [{ zoom: z }];
+      zoomed = true;
+    }
+    if(!Object.keys(constraints).length) return false;
+    await track.applyConstraints(constraints);
+    return zoomed;
   }catch(e){
-    console.warn('No se pudo usar la resolución máxima de la cámara:', e);
+    console.warn('No se pudo preparar la cámara:', e);
+    return false;
   }
 }
 
@@ -2017,7 +2042,9 @@ async function applyCameraZoom(value){
 }
 
 function updateCameraZoomUI(){
+  const layer=document.getElementById('previewZoom');
   const range=document.getElementById('zoomRange'), value=document.getElementById('zoomValue');
+  if(layer) layer.style.setProperty('--camera-display-zoom', String(state.scan.zoom || 1));
   if(range){ range.min=state.scan.zoomMin; range.max=state.scan.zoomMax; range.step=state.scan.zoomStep; range.value=state.scan.zoom; }
   if(value) value.textContent=`${state.scan.zoom.toFixed(1)}×`;
 }
@@ -2146,7 +2173,8 @@ function resetToAdjust(){
 function getVideoSourceRect(video){
   const vw=video.videoWidth,vh=video.videoHeight;
   const ew=video.clientWidth,eh=video.clientHeight;
-  const scale=Math.max(ew/vw,eh/vh);
+  const digitalZoom=Math.max(1, Number(state.scan.zoom)||1);
+  const scale=Math.max(ew/vw,eh/vh)*digitalZoom;
   const rw=vw*scale,rh=vh*scale;
   return {left:(ew-rw)/2,top:(eh-rh)/2,width:rw,height:rh};
 }
@@ -2619,7 +2647,9 @@ function renderScanTabLive(modeRow){
   if(s.liveActive){
     stage = `<div class="card-box video-box">
       <div class="video-wrap">
-        <video id="liveVideo" playsinline muted autoplay></video>
+        <div class="preview-zoom" id="previewZoom">
+          <video id="liveVideo" playsinline muted autoplay></video>
+        </div>
         <div id="roiCard" class="roi-card"></div>
         <div id="roiNum" class="roi-num"><div id="roiNumResize" class="roi-num-resize"></div></div>
       </div>
