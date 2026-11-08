@@ -2,3 +2,4 @@ node_modules/
 .env
 config.local.js
 download_errors.txt
+__pycache__/

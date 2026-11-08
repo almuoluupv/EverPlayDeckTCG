@@ -1,0 +1,90 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { validateFrame, detectQuad, warpCanonical, decideMatch, searchTop } from '../scanner/new-scan.js';
+
+function image(width, height, paint) {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const [r, g, b] = paint(x, y);
+      const i = (y * width + x) * 4;
+      data[i] = r;
+      data[i + 1] = g;
+      data[i + 2] = b;
+      data[i + 3] = 255;
+    }
+  }
+  return { width, height, data };
+}
+
+test('rechaza la bandeja vacía y el fogonazo', () => {
+  const dark = image(80, 120, () => [0, 0, 0]);
+  const flash = image(80, 120, () => [255, 255, 255]);
+  assert.equal(validateFrame(dark, null).ok, false);
+  assert.equal(validateFrame(flash, null).ok, false);
+  assert.match(validateFrame(dark, null).message, /quieta/);
+});
+
+test('encuentra el borde y endereza a 504×704', () => {
+  const card = image(240, 360, (x, y) => {
+    const inside = x >= 40 && x < 180 && y >= 50 && y < 246;
+    if (!inside) return [0, 0, 0];
+    const n = ((x * 17 + y * 13) % 50) + 80;
+    return [n, 40 + (x % 30), 30 + (y % 40)];
+  });
+  const gate = validateFrame(card, null);
+  assert.equal(gate.ok, true, `nitidez ${gate.sharp} media ${gate.mean}`);
+  const quad = detectQuad(card);
+  assert.ok(quad, 'no vio el cuadrilátero');
+  const warped = warpCanonical(card, quad);
+  assert.equal(warped.width, 504);
+  assert.equal(warped.height, 704);
+  let bright = 0;
+  const mid = (352 * 504 + 252) * 4;
+  for (let c = 0; c < 3; c++) bright += warped.data[mid + c];
+  assert.ok(bright > 60, 'el centro enderezado salió negro');
+});
+
+test('no confirma sin margen y nunca añade sola', () => {
+  const weak = decideMatch({
+    top: [{ id: 'a', score: 0.6 }, { id: 'b', score: 0.58 }],
+    bordered: true,
+    model: true,
+    ocrIds: [],
+  });
+  assert.equal(weak.pendingId, null);
+  assert.ok(weak.suggestionIds.length > 0);
+  const strong = decideMatch({
+    top: [{ id: 'a', score: 0.91 }, { id: 'b', score: 0.8 }],
+    bordered: true,
+    model: true,
+    ocrIds: [],
+  });
+  assert.equal(strong.pendingId, 'a');
+  const noBorder = decideMatch({
+    top: [{ id: 'a', score: 0.95 }, { id: 'b', score: 0.4 }],
+    bordered: false,
+    model: true,
+    ocrIds: [],
+  });
+  assert.equal(noBorder.pendingId, null);
+  const reprint = decideMatch({
+    top: [{ id: 'art', score: 0.84 }, { id: 'reprint', score: 0.83 }],
+    bordered: true,
+    model: true,
+    ocrIds: ['reprint'],
+  });
+  assert.equal(reprint.pendingId, 'reprint');
+});
+
+test('la búsqueda int8 devuelve el vector plantado', () => {
+  const dim = 128;
+  const ids = ['una', 'otra', 'tercera'];
+  const bytes = new Int8Array(ids.length * dim);
+  for (let i = 0; i < dim; i++) bytes[dim + i] = i < 8 ? 127 : 0;
+  const query = new Float32Array(dim);
+  for (let i = 0; i < 8; i++) query[i] = 1;
+  const top = searchTop(query, bytes, ids, dim, 2);
+  assert.equal(top[0].id, 'otra');
+  assert.ok(top[0].score > top[1].score);
+});

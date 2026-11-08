@@ -12,7 +12,10 @@
     "test": "node --test api/*.test.js",
     "check:scanner": "node scripts/check-scanner.mjs",
     "check:framed": "node scripts/check-framed-match.mjs",
-    "check:preview": "node scripts/check-preview-stable.mjs"
+    "check:preview": "node scripts/check-preview-stable.mjs",
+    "check:new-scan": "node --test scripts/check-new-scan.mjs",
+    "check:embed": "node scripts/check-embed-browser.mjs",
+    "build:embed": "python3 scripts/build-embed-index.py"
   },
   "dependencies": {
     "@clerk/backend": "^2.29.0",

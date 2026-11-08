@@ -1,0 +1,21 @@
+{
+  "modelVersion": "mobilenetv3-small-pool1024-proj128-20261108",
+  "dim": 128,
+  "count": 14197,
+  "input": [
+    224,
+    224
+  ],
+  "canonical": [
+    504,
+    704
+  ],
+  "source": "catalog image low.webp",
+  "cardsInCatalog": 15320,
+  "cardsWithoutImage": 1109,
+  "cardsSkipped": 14,
+  "modelFile": "models/card-embed.onnx",
+  "indexFile": "data/embed-int8.bin",
+  "idsFile": "data/embed-ids.json",
+  "phashFile": "data/phash-canon.json"
+}

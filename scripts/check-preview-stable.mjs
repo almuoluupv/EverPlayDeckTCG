@@ -149,7 +149,7 @@ try {
   assert(after.layerZoom === '1', 'el marco se escaló además del zoom del track: ' + after.layerZoom);
   assert(after.layerRatio > 0.9 && after.layerRatio < 1.15, 'el marco no coincide con la vista: ' + after.layerRatio);
   assert(after.layerTransform === 'none', 'el marco sigue usando transform: ' + after.layerTransform);
-  assert(after.build === '2026.11.03.5' && after.stamp.includes('2026.11.03.5'), 'falta la versión visible: ' + after.stamp);
+  assert(after.build === '2026.11.08.1' && after.stamp.includes('2026.11.08.1'), 'falta la versión visible: ' + after.stamp);
   await page.click('#resetZoomBtn');
   const resetZoom = await page.evaluate(() => window.__constraintCalls.at(-1).advanced[0].zoom);
   assert(resetZoom === 3, 'restablecer no volvió al acercamiento inicial: ' + resetZoom);
@@ -297,6 +297,7 @@ try {
       exposureMode: 'continuous', exposureTime: 0.008, iso: 200,
       whiteBalanceMode: 'continuous', colorTemperature: 4500,
     };
+    state.scan.engine = 'classic';
     window.__constraintCalls = [];
     window.__gumCalls = 0;
     track.applyConstraints = (constraints) => {

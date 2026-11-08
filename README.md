@@ -63,4 +63,18 @@ El plan gratuito de Render se duerme tras unos 15 minutos sin visitas y tarda al
 
 Sin sesión, el álbum es solo de este navegador. Con sesión, cada cuenta de Clerk lee y guarda únicamente sus cartas. Lo que añadas sin entrar no pasa a la cuenta, y otra persona que entre no ve ese álbum.
 
-Para regenerar hashes en el ordenador: `npm install sharp` y `node compute_hashes.js`. Ese script no forma parte de la web ni de Render.
+Para regenerar hashes del escáner clásico en el ordenador: `npm install sharp` y `node compute_hashes.js`. Ese script no forma parte de la web ni de Render.
+
+## Escáner nuevo
+
+En la pestaña Escanear hay dos caminos: **Nuevo** (por defecto) y **Clásico**. Nuevo valida el fotograma, endereza la carta a 504×704 y busca un embedding de 128 dimensiones en el propio teléfono. El número de coleccionista se lee una sola vez, solo para confirmar o desempatar. Nada entra en el álbum hasta pulsar **Añadir**. Clásico es el escáner anterior y se queda hasta que haya fotos reales del card slider para medir el nuevo.
+
+El índice sale del arte `low.webp` del catálogo, no de fotos del teléfono:
+
+```bash
+python3 scripts/build-embed-index.py
+```
+
+Escribe `models/card-embed.onnx`, `data/embed-int8.bin`, `data/embed-ids.json`, `data/phash-canon.json` y `data/scan-manifest.json`. No toca `data/phash.json`. Si el modelo no carga en el navegador, Nuevo usa el pHash canónico. Las cartas sin imagen en el catálogo no están en el índice.
+
+`npm run check:new-scan` cubre el borde y la decisión. `npm run check:embed` abre Chrome y comprueba que el modelo ONNX responde. `npm run check:preview` sigue comprobando que la cámara no se reconstruye entre cartas.

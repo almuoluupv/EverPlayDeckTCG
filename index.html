@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="album-build" content="2026.11.03.5">
+<meta name="album-build" content="2026.11.08.1">
+<script type="module" src="./scanner/new-scan.js"></script>
 <title>Mi Álbum Pokémon</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -591,6 +592,8 @@ const state = {
     zoomMax: 5,
     zoomStep: 0.1,
     hardwareZoom: false,
+    engine: 'new',
+    matchDiag: '',
     roi: { x: 0.08, y: 0.08, w: 0.84, h: 0.82 },
     roiNum: { x: 0.55, y: 0.82, w: 0.32, h: 0.10 },
     roiDragging: false,
@@ -630,11 +633,15 @@ const state = {
     query: ''
   }
 };
+try {
+  const savedEngine = localStorage.getItem('pokemon_album_scan_engine');
+  if(savedEngine === 'classic' || savedEngine === 'new') state.scan.engine = savedEngine;
+} catch {}
 
 /* El catálogo sale de ./data/. El álbum usa la API solo con sesión y config.js
    relleno. Si falta la clave, la URL de la API o el login, se queda en localStorage. */
 
-const APP_BUILD = '2026.11.03.5';
+const APP_BUILD = '2026.11.08.1';
 const STORAGE_KEY = 'pokemon_album_collection_v1';
 let authListenerReady = false;
 let clerkFailed = false;
@@ -2238,8 +2245,10 @@ function updateCameraZoomUI(){
 function updateRoiUI(){
   const elCard = document.getElementById('roiCard');
   const elNum  = document.getElementById('roiNum');
+  const classic = state.scan.engine === 'classic';
   if(elCard){
     const r = state.scan.roi;
+    elCard.style.display = classic ? '' : 'none';
     elCard.style.left   = (r.x*100)+'%';
     elCard.style.top    = (r.y*100)+'%';
     elCard.style.width  = (r.w*100)+'%';
@@ -2247,6 +2256,7 @@ function updateRoiUI(){
   }
   if(elNum){
     const n = state.scan.roiNum;
+    elNum.style.display = classic ? '' : 'none';
     elNum.style.left   = (n.x*100)+'%';
     elNum.style.top    = (n.y*100)+'%';
     elNum.style.width  = (n.w*100)+'%';
@@ -2672,6 +2682,48 @@ async function recognizeCardSurfaces({ numberBin, numberGray, nameBin, nameGray,
   return settleRecognition({ numberTexts, nameText, cardColor, onStatus, missHint });
 }
 
+function newScanHooks(){
+  return {
+    ocr: async (canvas) => {
+      try { await ensureOcrWorker(); } catch { return ''; }
+      if(!ocrWorker) return '';
+      return ocrCanvas(canvas, { psmMode: '7', whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/' });
+    },
+    ocrIds: async (text) => {
+      const fractions = extractNumberFraction(text);
+      if(!fractions.length) return [];
+      const cards = await matchByNumberAndSet(fractions, extractSetCode(text));
+      return cards.map((card) => card.id);
+    },
+  };
+}
+
+async function runNewRecognition(video){
+  if(!window.NewScan){
+    state.scan.liveMessage = 'El reconocedor nuevo aún se está cargando. Prueba de nuevo en un momento.';
+    render();
+    return;
+  }
+  const frame = document.createElement('canvas');
+  frame.width = video.videoWidth;
+  frame.height = video.videoHeight;
+  frame.getContext('2d').drawImage(video, 0, 0);
+  state.scan.liveMessage = 'Buscando la carta…';
+  const statusEl = document.getElementById('liveStatusText');
+  if(statusEl) statusEl.textContent = state.scan.liveMessage;
+  const result = await window.NewScan.recognize(frame, newScanHooks());
+  const catalog = await ensureGlobalIndex();
+  const byId = new Map(catalog.map((card) => [card.id, card]));
+  state.scan.matchDiag = result.diag || '';
+  state.scan.liveText = result.ocrText || '';
+  state.scan.nameResults = [];
+  state.scan.pendingConfirm = result.pendingId ? (byId.get(result.pendingId) || null) : null;
+  const ids = result.suggestionIds || [];
+  state.scan.suggestions = ids.map((id) => byId.get(id)).filter(Boolean);
+  state.scan.liveMessage = result.message || 'No la reconozco.';
+  render();
+}
+
 function requestLiveCapture(){
   if(liveBusy) return;
   explicitCapture = true;
@@ -2683,7 +2735,10 @@ async function captureAndRecognize(){
   explicitCapture = false;
   if(liveBusy) return;
   const video = document.getElementById('liveVideo');
-  if(!video || video.readyState<2 || !video.videoWidth || !video.videoHeight || !ocrWorker){
+  if(!video || video.readyState<2 || !video.videoWidth || !video.videoHeight){
+    state.scan.liveMessage='📷 Cámara no lista. Espera un instante.'; render(); return;
+  }
+  if(state.scan.engine === 'classic' && !ocrWorker){
     state.scan.liveMessage='📷 Cámara no lista. Espera un instante.'; render(); return;
   }
   liveBusy = true; state.scan.liveError = ''; state.scan.suggestions = [];
@@ -2691,6 +2746,10 @@ async function captureAndRecognize(){
   try{
     await lockOpticsToCard(cameraTrack);
     refreshTrackDiag(cameraTrack);
+    if(state.scan.engine !== 'classic'){
+      await runNewRecognition(video, statusEl);
+      return;
+    }
     const numRoi = state.scan.roiNum;
     const roi = state.scan.roi;
     const nameRoi = { x: roi.x, y: roi.y, w: roi.w, h: roi.h * 0.15 };
@@ -2727,6 +2786,7 @@ function addScannedCard(card){
   state.scan.nameResults=[];
   state.scan.liveText='';
   state.scan.liveError='';
+  state.scan.matchDiag='';
   state.scan.livePhase='scanning';
   state.scan.liveStatus='scanning';
   state.scan.liveMessage = opticsLock && opticsLock.focusMode === 'manual'
@@ -2818,8 +2878,12 @@ function confirmCardHTML(card, yesId, noId){
 }
 
 function guideHTML(){
+  const classic = state.scan.engine === 'classic';
+  const help = classic
+    ? 'El recuadro azul cubre la carta entera. El amarillo cubre el número, en la esquina inferior izquierda (por ejemplo 128/182), justo encima del copyright. Acerca la cámara y ajusta el recuadro amarillo a esos dígitos.'
+    : 'El reconocedor nuevo busca el borde de la carta solo. Déjala quieta y pulsa Capturar. Nada se añade sin confirmar. Clásico conserva el escáner anterior.';
   return `<button type="button" class="btn btn-ghost" id="guideToggle" style="width:auto;min-height:44px">${state.scan.guideOpen ? 'Ocultar ayuda' : 'Cómo encuadrar'}</button>
-    ${state.scan.guideOpen ? `<div class="guide-panel hint">El recuadro azul cubre la carta entera. El amarillo cubre el número, en la esquina inferior izquierda (por ejemplo 128/182), justo encima del copyright. Acerca la cámara y ajusta el recuadro amarillo a esos dígitos.</div>` : ''}`;
+    ${state.scan.guideOpen ? `<div class="guide-panel hint">${help}</div>` : ''}`;
 }
 
 function renderKeeping(id){
@@ -2845,7 +2909,11 @@ function resultCardHTML(card, idx){
 
 /* ---------- render por pestaña ---------- */
 function renderScanTab(){
+  const engine = state.scan.engine === 'classic' ? 'classic' : 'new';
   const modeRow = `<div class="mode-row">
+    <button type="button" class="chip ${engine==='new'?'active':''}" data-engine="new">Nuevo</button>
+    <button type="button" class="chip ${engine==='classic'?'active':''}" data-engine="classic">Clásico</button>
+  </div><div class="mode-row">
     <button type="button" class="chip ${state.scan.mode==='live'?'active':''}" data-mode="live">Cámara</button>
     <button type="button" class="chip ${state.scan.mode==='photo'?'active':''}" data-mode="photo">Una foto</button>
   </div>`;
@@ -2855,9 +2923,10 @@ function renderScanTab(){
 
 function renderScanTabLive(modeRow){
   const s = state.scan;
+  const classic = s.engine === 'classic';
   const statusLine = (!s.liveActive || s.livePhase !== 'scanning')
-    ? 'Encaja el número abajo a la izquierda'
-    : (s.liveMessage || 'Leyendo el número…');
+    ? (classic ? 'Encaja el número abajo a la izquierda' : 'Deja la carta quieta y pulsa Capturar')
+    : (s.liveMessage || (classic ? 'Leyendo el número…' : 'Buscando la carta…'));
   let stage = '';
   if(s.liveActive){
     stage = `<div class="card-box video-box">
@@ -2872,7 +2941,7 @@ function renderScanTabLive(modeRow){
       ${s.liveError ? `<p id="liveErrorNote" class="account-note bad">${escapeHtml(s.liveError)}</p>` : ''}
     </div>`;
   } else {
-    stage = `<div class="card-box"><p class="hint" style="margin-top:0">Encaja el número abajo a la izquierda.</p></div>`;
+    stage = `<div class="card-box"><p class="hint" style="margin-top:0">${classic ? 'Encaja el número abajo a la izquierda.' : 'El reconocedor nuevo busca el borde. Nada se añade sin pulsar Añadir.'}</p></div>`;
   }
   const adjusting = s.liveActive && s.livePhase !== 'scanning';
   let actions = guideHTML();
@@ -2901,6 +2970,7 @@ function renderScanTabLive(modeRow){
   }
   actions += `<p class="build-stamp" id="buildStamp">Versión ${APP_BUILD}</p>`;
   actions += `<p class="track-diag" id="trackDiag">${escapeHtml(s.trackDiag || 'Cámara —')}</p>`;
+  actions += `<p class="track-diag" id="matchDiag">${escapeHtml(s.matchDiag || '')}</p>`;
   let confirm = '';
   if(s.pendingConfirm){
     confirm += confirmCardHTML(s.pendingConfirm, 'confirmYesBtn', 'confirmNoBtn');
@@ -2937,6 +3007,10 @@ function renderScanTabLive(modeRow){
     side.innerHTML = actions + confirm;
     recentHost.innerHTML = recent;
     status.textContent = statusLine;
+    document.querySelectorAll('.chip[data-engine]').forEach((el) => {
+      el.classList.toggle('active', el.dataset.engine === (s.engine === 'classic' ? 'classic' : 'new'));
+    });
+    updateRoiUI();
     let err = document.getElementById('liveErrorNote');
     if(s.liveError){
       if(!err){
@@ -3504,6 +3578,14 @@ function attachDynamicListeners(){
   }
   const redeemPlan = document.getElementById('redeemPlan');
   if(redeemPlan) redeemPlan.addEventListener('click', () => redeemPlanCode());
+  document.querySelectorAll('.chip[data-engine]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      if(state.scan.engine === el.dataset.engine) return;
+      state.scan.engine = el.dataset.engine;
+      try { localStorage.setItem('pokemon_album_scan_engine', state.scan.engine); } catch {}
+      render();
+    });
+  });
   document.querySelectorAll('.chip[data-mode]').forEach(el=>{
     el.addEventListener('click', ()=>{
       if(state.scan.mode === el.dataset.mode) return;
@@ -3751,10 +3833,23 @@ async function onFileSelected(e){
   if(!file) return;
   try{
     const dataUrl = await resizeImage(file);
-    state.scan.photo = { image: dataUrl, status: 'ocr', guess: '', results: [], detail: 'Preparando el motor de lectura…' };
+    state.scan.photo = { image: dataUrl, status: 'ocr', guess: '', results: [], detail: state.scan.engine === 'classic' ? 'Preparando el motor de lectura…' : 'Buscando la carta…' };
     render();
-    await ensureOcrWorker();
     const full = await loadCanvasFromDataUrl(dataUrl);
+    if(state.scan.engine !== 'classic' && window.NewScan){
+      const result = await window.NewScan.recognize(full, newScanHooks());
+      const catalog = await ensureGlobalIndex();
+      const byId = new Map(catalog.map((card) => [card.id, card]));
+      const pending = result.pendingId ? byId.get(result.pendingId) : null;
+      const suggestions = (result.suggestionIds || []).map((id) => byId.get(id)).filter(Boolean);
+      state.scan.photo.results = pending ? [pending, ...suggestions] : suggestions;
+      state.scan.photo.detail = [result.diag, result.message].filter(Boolean).join(' — ');
+      state.scan.photo.guess = '';
+      state.scan.photo.status = 'done';
+      render();
+      return;
+    }
+    await ensureOcrWorker();
     const numberColor = cropRatioCanvas(full, 0, 0.78, 0.92, 0.2, { scaleUp: true });
     const nameColor = cropRatioCanvas(full, 0, 0, 1, 0.15, { scaleUp: true });
     const decision = await recognizeCardSurfaces({
