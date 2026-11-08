@@ -75,6 +75,6 @@ El índice sale del arte `low.webp` del catálogo, no de fotos del teléfono:
 python3 scripts/build-embed-index.py
 ```
 
-Escribe `models/card-embed.onnx`, `data/embed-int8.bin`, `data/embed-ids.json`, `data/phash-canon.json` y `data/scan-manifest.json`. No toca `data/phash.json`. Si el modelo no carga en el navegador, Nuevo usa el pHash canónico. Las cartas sin imagen en el catálogo no están en el índice.
+Escribe `models/card-embed.onnx`, `data/embed-int8.bin`, `data/embed-ids.json`, `data/phash-canon.json` y `data/scan-manifest.json`. No toca `data/phash.json`. Si el modelo no carga en el navegador, Nuevo usa el pHash canónico. Las cartas que siguen sin imagen pública no están en el índice. `python3 scripts/recover-missing-art.py` busca de nuevo el arte en TCGdex, images.pokemontcg.io e images.pokemoncard.io.
 
 `npm run check:new-scan` cubre el borde y la decisión. `npm run check:embed` abre Chrome y comprueba que el modelo ONNX responde. `npm run check:preview` sigue comprobando que la cámara no se reconstruye entre cartas.
