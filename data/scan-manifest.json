@@ -17,5 +17,11 @@
   "modelFile": "models/card-embed.onnx",
   "indexFile": "data/embed-int8.bin",
   "idsFile": "data/embed-ids.json",
-  "phashFile": "data/phash-canon.json"
+  "phashFile": "data/phash-canon.json",
+  "artGridFile": "data/art-grid.bin",
+  "artGridDim": 240,
+  "artGrid": [
+    8,
+    10
+  ]
 }

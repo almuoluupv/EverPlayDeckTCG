@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="album-build" content="2026.11.08.2">
+<meta name="album-build" content="2026.11.09.1">
 <script type="module" src="./scanner/new-scan.js"></script>
 <title>Mi Álbum Pokémon</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -641,7 +641,7 @@ try {
 /* El catálogo sale de ./data/. El álbum usa la API solo con sesión y config.js
    relleno. Si falta la clave, la URL de la API o el login, se queda en localStorage. */
 
-const APP_BUILD = '2026.11.08.2';
+const APP_BUILD = '2026.11.09.1';
 const STORAGE_KEY = 'pokemon_album_collection_v1';
 let authListenerReady = false;
 let clerkFailed = false;
@@ -4027,6 +4027,10 @@ window.addEventListener('unhandledrejection', (event) => {
 
 /* ---------- init ---------- */
 (async function init(){
+  // Escanear tiene que pintarse ya, con o sin sesión. Clerk y el álbum
+  // remoto pueden tardar; si esperamos, el botón de la cámara no existe
+  // hasta que el usuario cambia de pestaña.
+  render();
   await loadOptionalScript('./config.local.js');
   await setupAuth();
   await loadCollection();

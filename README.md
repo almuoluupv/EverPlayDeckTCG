@@ -69,7 +69,7 @@ Para regenerar hashes del escáner clásico en el ordenador: `npm install sharp`
 
 En la pestaña Escanear hay dos caminos: **Nuevo** (por defecto) y **Clásico**. Nuevo valida el fotograma, endereza la carta a 504×704 y busca un embedding de 128 dimensiones en el propio teléfono. El número de coleccionista se lee una sola vez, solo para confirmar o desempatar. Nada entra en el álbum hasta pulsar **Añadir**. Clásico es el escáner anterior y se queda hasta que haya fotos reales del card slider para medir el nuevo.
 
-El índice sale del arte `low.webp` del catálogo, no de fotos del teléfono:
+El índice sale del arte `low.webp` del catálogo, no de fotos del teléfono. Una foto real no cae al lado de ese arte en el embedding, así que Nuevo también compara una rejilla de color del dibujo (`data/art-grid.bin`) y enseña las candidatas para confirmar con Añadir:
 
 ```bash
 python3 scripts/build-embed-index.py

@@ -318,6 +318,158 @@ export function centerCard(image) {
   return cropFraction(image, 0.15, 0.12, 0.7, 0.76);
 }
 
+/**
+ * Carta a sangre: no hay mesa alrededor, así que el cuadrilátero de borde
+ * no existe. Recorta el bloque claro y lo deja en la proporción 63/88.
+ */
+export function axisAlignedCard(image) {
+  const maxW = 320;
+  const scale = Math.min(1, maxW / image.width);
+  const w = Math.max(8, Math.round(image.width * scale));
+  const h = Math.max(8, Math.round(image.height * scale));
+  // Vecino más cercano para no fundir un texto fino con el borde.
+  // Si alrededor hay gris de la interfaz, la carta se separa por el color.
+  // En el visor el alrededor es negro y basta con la luminancia.
+  const mask = new Uint8Array(w * h);
+  const { data } = image;
+  let grayUi = 0;
+  const samples = w * h;
+  const pix = new Uint8Array(samples * 3);
+  for (let y = 0; y < h; y++) {
+    const sy = Math.min(image.height - 1, Math.floor((y + 0.5) * image.height / h));
+    for (let x = 0; x < w; x++) {
+      const sx = Math.min(image.width - 1, Math.floor((x + 0.5) * image.width / w));
+      const i = (sy * image.width + sx) * 4;
+      const p = (y * w + x) * 3;
+      pix[p] = data[i];
+      pix[p + 1] = data[i + 1];
+      pix[p + 2] = data[i + 2];
+      const max = Math.max(data[i], data[i + 1], data[i + 2]);
+      const min = Math.min(data[i], data[i + 1], data[i + 2]);
+      const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      if (luma > 18 && luma < 48 && max - min < 12) grayUi++;
+    }
+  }
+  const useColor = grayUi > samples * 0.12;
+  for (let p = 0, i = 0; p < samples; p++, i += 3) {
+    const r = pix[i];
+    const g = pix[i + 1];
+    const b = pix[i + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+    if (useColor) {
+      if (luma > 24 && (max - min > 18 || luma > 150)) mask[p] = 1;
+    } else if (luma > 28) mask[p] = 1;
+  }
+  const blob = largestBlob(mask, w, h);
+  if (!blob || blob.count < w * h * 0.2) return null;
+  // Una línea de texto suelta (el aviso del escáner) no es el borde de la carta.
+  const rowFill = (y) => {
+    let n = 0;
+    for (let x = blob.minX; x <= blob.maxX; x++) if (mask[y * w + x]) n++;
+    return n;
+  };
+  const colFill = (x) => {
+    let n = 0;
+    for (let y = blob.minY; y <= blob.maxY; y++) if (mask[y * w + x]) n++;
+    return n;
+  };
+  let minX = blob.minX;
+  let minY = blob.minY;
+  let maxX = blob.maxX;
+  let maxY = blob.maxY;
+  const minRow = Math.max(8, (blob.maxX - blob.minX) * 0.45);
+  const minCol = Math.max(8, (blob.maxY - blob.minY) * 0.45);
+  while (minY < maxY && rowFill(minY) < minRow) minY++;
+  while (maxY > minY && rowFill(maxY) < minRow) maxY--;
+  while (minX < maxX && colFill(minX) < minCol) minX++;
+  while (maxX > minX && colFill(maxX) < minCol) maxX--;
+  const bw = maxX - minX + 1;
+  const bh = maxY - minY + 1;
+  if (bw < 8 || bh < 8 || bh < bw) return null;
+  const target = 63 / 88;
+  let x0 = minX;
+  let y0 = minY;
+  let x1 = maxX + 1;
+  let y1 = maxY + 1;
+  const ratio = bw / bh;
+  if (ratio > target) {
+    const nw = target * bh;
+    const pad = (bw - nw) / 2;
+    x0 = minX + pad;
+    x1 = maxX + 1 - pad;
+  } else if (ratio < target) {
+    const nh = bw / target;
+    const pad = (bh - nh) / 2;
+    y0 = minY + pad;
+    y1 = maxY + 1 - pad;
+  }
+  const boxW = (x1 - x0) / scale;
+  const boxH = (y1 - y0) / scale;
+  if (boxW * boxH < image.width * image.height * 0.28) return null;
+  const left = x0 / scale;
+  const top = y0 / scale;
+  const right = x1 / scale;
+  const bottom = y1 / scale;
+  return [
+    { x: left, y: top },
+    { x: right, y: top },
+    { x: right, y: bottom },
+    { x: left, y: bottom },
+  ];
+}
+
+const ART_W = 8;
+const ART_H = 10;
+const ART_DIM = ART_W * ART_H * 3;
+
+/** Rejilla de color del dibujo. Misma ventana que data/art-grid.bin. */
+export function artVector(image) {
+  const vals = new Float32Array(ART_DIM);
+  const x0 = 0.08 * image.width;
+  const y0 = 0.12 * image.height;
+  const cw = 0.84 * image.width;
+  const ch = 0.38 * image.height;
+  let mean = 0;
+  let p = 0;
+  for (let y = 0; y < ART_H; y++) {
+    const sy = y0 + (y + 0.5) * ch / ART_H - 0.5;
+    const yA = Math.max(0, Math.min(image.height - 1, Math.floor(sy)));
+    const yB = Math.max(0, Math.min(image.height - 1, yA + 1));
+    const fy = Math.min(1, Math.max(0, sy - yA));
+    for (let x = 0; x < ART_W; x++) {
+      const sx = x0 + (x + 0.5) * cw / ART_W - 0.5;
+      const xA = Math.max(0, Math.min(image.width - 1, Math.floor(sx)));
+      const xB = Math.max(0, Math.min(image.width - 1, xA + 1));
+      const fx = Math.min(1, Math.max(0, sx - xA));
+      for (let c = 0; c < 3; c++) {
+        const pick = (xx, yy) => image.data[(yy * image.width + xx) * 4 + c];
+        const v = (pick(xA, yA) * (1 - fx) + pick(xB, yA) * fx) * (1 - fy)
+          + (pick(xA, yB) * (1 - fx) + pick(xB, yB) * fx) * fy;
+        vals[p++] = v;
+        mean += v;
+      }
+    }
+  }
+  mean /= ART_DIM;
+  let varSum = 0;
+  for (let i = 0; i < ART_DIM; i++) {
+    const d = vals[i] - mean;
+    vals[i] = d;
+    varSum += d * d;
+  }
+  const std = Math.sqrt(varSum / ART_DIM) || 1;
+  let norm = 0;
+  for (let i = 0; i < ART_DIM; i++) {
+    vals[i] /= std;
+    norm += vals[i] * vals[i];
+  }
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < ART_DIM; i++) vals[i] /= norm;
+  return vals;
+}
+
 function imageToTensor(image) {
   const cropped = cropFraction(image, 0.06, 0.06, 0.88, 0.88);
   const size = 224;
@@ -357,7 +509,16 @@ function loadIndex() {
     ]);
     const bytes = new Int8Array(buf);
     if (bytes.length !== idsRes.length * manifest.dim) throw new Error('índice incompleto');
-    return { manifest, ids: idsRes, bytes };
+    let artBytes = null;
+    const artDim = manifest.artGridDim || ART_DIM;
+    if (manifest.artGridFile) {
+      const artRes = await fetch('./' + manifest.artGridFile);
+      if (artRes.ok) {
+        const art = new Int8Array(await artRes.arrayBuffer());
+        if (art.length === idsRes.length * artDim) artBytes = art;
+      }
+    }
+    return { manifest, ids: idsRes, bytes, artBytes, artDim };
   })();
   return indexPromise;
 }
@@ -426,10 +587,58 @@ export function searchTop(query, bytes, ids, dim = EMBED_DIM, limit = 8) {
     let dot = 0;
     const base = row * dim;
     for (let i = 0; i < dim; i++) dot += q[i] * bytes[base + i];
-    scored.push({ id: ids[row], score: dot / (127 * 127) });
+    // La consulta ya está normalizada. Cada fila int8 es el vector unitario
+    // por 127, así que el coseno es el producto partido por 127. Partir otra
+    // vez por 127 aplasta un acierto (1) hasta ~0,008 y nunca pasa el umbral.
+    scored.push({ id: ids[row], score: dot / 127 });
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, limit);
+}
+
+function unitQuery(query, dim) {
+  const q = new Float32Array(dim);
+  let norm = 0;
+  for (let i = 0; i < dim; i++) norm += query[i] * query[i];
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < dim; i++) q[i] = query[i] / norm;
+  return q;
+}
+
+/**
+ * El embedding de arte oficial queda casi igual de cerca de cualquier carta
+ * cuando la foto es de un teléfono. La rejilla de color del dibujo separa
+ * esa foto; el embedding solo desempata.
+ */
+export function searchFused(embedQuery, embedBytes, artQuery, artBytes, ids, embedDim = EMBED_DIM, artDim = ART_DIM, limit = 8) {
+  const n = ids.length;
+  const eq = unitQuery(embedQuery, embedDim);
+  const aq = artQuery && artBytes ? unitQuery(artQuery, artDim) : null;
+  const best = [];
+  const consider = (row) => {
+    let place = best.length;
+    while (place > 0 && row.score > best[place - 1].score) place--;
+    if (place >= limit) return;
+    best.splice(place, 0, row);
+    if (best.length > limit) best.pop();
+  };
+  for (let row = 0; row < n; row++) {
+    let edot = 0;
+    const eb = row * embedDim;
+    for (let i = 0; i < embedDim; i++) edot += eq[i] * embedBytes[eb + i];
+    const embed = edot / 127;
+    let score = embed;
+    let art = null;
+    if (aq) {
+      let adot = 0;
+      const ab = row * artDim;
+      for (let i = 0; i < artDim; i++) adot += aq[i] * artBytes[ab + i];
+      art = adot / 127;
+      score = art + 0.05 * embed;
+    }
+    consider({ id: ids[row], score, embed, art });
+  }
+  return best;
 }
 
 function dct1d(sig) {
@@ -511,8 +720,10 @@ export function decideMatch({ top, bordered, model, ocrIds }) {
   if (bordered && ocrHit && best.score >= 0.8) {
     return { pendingId: ocrHit, suggestionIds: top.filter((row) => row.id !== ocrHit).slice(0, 4).map((row) => row.id), message: 'El número coincide. ¿Es esta?' };
   }
-  if (bordered && best.score >= 0.86 && gap >= 0.04) {
-    return { pendingId: best.id, suggestionIds: [], message: '¿Es esta?' };
+  // 0,74 es un acierto claro de la rejilla de color más un poco de embedding.
+  // El margen evita confirmar cuando las primeras están empatadas.
+  if (bordered && best.score >= 0.74 && gap >= 0.05) {
+    return { pendingId: best.id, suggestionIds: top.filter((row) => row.id !== best.id).slice(0, 4).map((row) => row.id), message: '¿Es esta?' };
   }
   if (best.score >= 0.45) {
     return { pendingId: null, suggestionIds: top.slice(0, 5).map((row) => row.id), message: best.score >= 0.72 ? 'Varias parecidas. ¿Cuál es?' : 'No estoy seguro. ¿Es alguna de estas?' };
@@ -542,9 +753,10 @@ export async function recognize(canvas, hooks = {}) {
     return { ok: false, message: gate.message, diag: `borde no · nitidez ${gate.sharp.toFixed(0)}` };
   }
   lastRejectFp = null;
-  const quad = detectQuad(image);
-  const bordered = !!quad;
-  const canonical = quad ? warpCanonical(image, quad) : centerCard(image);
+  const perspective = detectQuad(image);
+  const fitted = perspective || axisAlignedCard(image);
+  const bordered = !!fitted;
+  const canonical = fitted ? warpCanonical(image, fitted) : centerCard(image);
   if (!canonical) {
     return { ok: false, message: 'No veo el borde de la carta.', diag: 'borde no' };
   }
@@ -563,7 +775,8 @@ export async function recognize(canvas, hooks = {}) {
     const tensor = imageToTensor(canonical);
     const raw = await embedWithWorker(tensor);
     const index = await loadIndex();
-    top = searchTop(raw, index.bytes, index.ids);
+    const art = bordered ? artVector(canonical) : null;
+    top = searchFused(raw, index.bytes, art, index.artBytes, index.ids, EMBED_DIM, index.artDim);
     model = true;
   } catch (err) {
     modelError = err && err.message ? err.message : 'sin modelo';
@@ -576,7 +789,7 @@ export async function recognize(canvas, hooks = {}) {
   const best = top[0];
   const scoreText = !best ? '—' : (model ? best.score.toFixed(2) : `d=${best.distance}`);
   const diag = [
-    bordered ? 'borde sí' : 'borde no',
+    perspective ? 'borde sí' : (bordered ? 'carta a sangre' : 'borde no'),
     `${ms} ms`,
     model ? `coseno ${scoreText}` : `phash ${scoreText}`,
     ocrText ? `número ${ocrText.replace(/\s+/g, ' ').trim().slice(0, 24)}` : 'número —',
@@ -587,12 +800,19 @@ export async function recognize(canvas, hooks = {}) {
     ok: true,
     bordered,
     model,
-    quad,
+    quad: fitted || null,
     message: decision.message,
     pendingId: decision.pendingId,
     suggestionIds: decision.suggestionIds,
     diag,
     ocrText,
+    top: top.slice(0, 5).map((row) => ({
+      id: row.id,
+      score: row.score,
+      art: row.art,
+      embed: row.embed,
+      distance: row.distance,
+    })),
   };
 }
 
@@ -602,6 +822,9 @@ export const NewScan = {
   warpCanonical,
   laplacianVariance,
   searchTop,
+  searchFused,
+  axisAlignedCard,
+  artVector,
   decideMatch,
   phashFromRgba,
   recognize,

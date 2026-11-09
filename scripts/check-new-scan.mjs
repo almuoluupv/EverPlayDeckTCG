@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateFrame, detectQuad, warpCanonical, decideMatch, searchTop } from '../scanner/new-scan.js';
+import { validateFrame, detectQuad, warpCanonical, axisAlignedCard, decideMatch, searchTop } from '../scanner/new-scan.js';
 
 function image(width, height, paint) {
   const data = new Uint8ClampedArray(width * height * 4);
@@ -75,6 +75,23 @@ test('no confirma sin margen y nunca añade sola', () => {
     ocrIds: ['reprint'],
   });
   assert.equal(reprint.pendingId, 'reprint');
+});
+
+test('una carta a sangre se toma como la carta, no como un recorte', () => {
+  const card = image(180, 250, () => [190, 150, 70]);
+  const quad = axisAlignedCard(card);
+  assert.ok(quad, 'no recortó la carta a sangre');
+  const warped = warpCanonical(card, quad);
+  assert.equal(warped.width, 504);
+  assert.equal(warped.height, 704);
+});
+
+test('el coseno int8 no se parte dos veces por 127', () => {
+  const dim = 4;
+  const bytes = new Int8Array([127, 0, 0, 0]);
+  const query = new Float32Array([3, 0, 0, 0]);
+  const top = searchTop(query, bytes, ['sola'], dim, 1);
+  assert.ok(Math.abs(top[0].score - 1) < 0.02, `score ${top[0].score}`);
 });
 
 test('la búsqueda int8 devuelve el vector plantado', () => {
