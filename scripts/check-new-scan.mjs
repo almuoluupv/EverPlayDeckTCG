@@ -75,6 +75,15 @@ test('no confirma sin margen y nunca añade sola', () => {
     ocrIds: ['reprint'],
   });
   assert.equal(reprint.pendingId, 'reprint');
+  const byNumber = decideMatch({
+    top: [{ id: 'sm8-228', score: 0.65 }, { id: 'otra', score: 0.6 }],
+    bordered: true,
+    model: true,
+    ocrIds: ['swsh11-109'],
+  });
+  assert.equal(byNumber.pendingId, 'swsh11-109');
+  assert.equal(byNumber.suggestionIds[0], 'sm8-228');
+  assert.match(byNumber.message, /número/);
 });
 
 test('una carta a sangre se toma como la carta, no como un recorte', () => {

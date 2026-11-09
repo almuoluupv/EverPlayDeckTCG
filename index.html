@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="album-build" content="2026.11.09.1">
+<meta name="album-build" content="2026.11.09.2">
 <script type="module" src="./scanner/new-scan.js"></script>
 <title>Mi Álbum Pokémon</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -641,7 +641,7 @@ try {
 /* El catálogo sale de ./data/. El álbum usa la API solo con sesión y config.js
    relleno. Si falta la clave, la URL de la API o el login, se queda en localStorage. */
 
-const APP_BUILD = '2026.11.09.1';
+const APP_BUILD = '2026.11.09.2';
 const STORAGE_KEY = 'pokemon_album_collection_v1';
 let authListenerReady = false;
 let clerkFailed = false;
@@ -2687,7 +2687,7 @@ function newScanHooks(){
     ocr: async (canvas) => {
       try { await ensureOcrWorker(); } catch { return ''; }
       if(!ocrWorker) return '';
-      return ocrCanvas(canvas, { psmMode: '7', whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/' });
+      return ocrCanvas(canvas, { psmMode: '7', whitelist: '0123456789/' });
     },
     ocrIds: async (text) => {
       const fractions = extractNumberFraction(text);

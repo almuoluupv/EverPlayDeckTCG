@@ -359,7 +359,7 @@ export function axisAlignedCard(image) {
     const min = Math.min(r, g, b);
     const luma = 0.299 * r + 0.587 * g + 0.114 * b;
     if (useColor) {
-      if (luma > 24 && (max - min > 18 || luma > 150)) mask[p] = 1;
+      if (luma > 22 && (max - min > 15 || luma > 160)) mask[p] = 1;
     } else if (luma > 28) mask[p] = 1;
   }
   const blob = largestBlob(mask, w, h);
@@ -716,9 +716,21 @@ export function decideMatch({ top, bordered, model, ocrIds }) {
   const best = top[0];
   const second = top[1];
   const gap = best.score - (second ? second.score : 0);
-  const ocrHit = (ocrIds || []).find((id) => top.slice(0, 8).some((row) => row.id === id));
-  if (bordered && ocrHit && best.score >= 0.8) {
-    return { pendingId: ocrHit, suggestionIds: top.filter((row) => row.id !== ocrHit).slice(0, 4).map((row) => row.id), message: 'El número coincide. ¿Es esta?' };
+  // El número impreso manda aunque el coseno de otra carta sea más alto.
+  // Si hay varias con el mismo número, se queda la que mejor encaja en la imagen.
+  if (bordered && ocrIds && ocrIds.length) {
+    const scoreOf = (id) => {
+      const row = top.find((item) => item.id === id);
+      return row ? row.score : 0;
+    };
+    const chosen = ocrIds.slice().sort((a, b) => scoreOf(b) - scoreOf(a))[0];
+    const rest = ocrIds.filter((id) => id !== chosen);
+    for (const row of top) if (row.id !== chosen && !rest.includes(row.id)) rest.push(row.id);
+    return {
+      pendingId: chosen,
+      suggestionIds: rest.slice(0, 4),
+      message: 'El número coincide. ¿Es esta?',
+    };
   }
   // 0,74 es un acierto claro de la rejilla de color más un poco de embedding.
   // El margen evita confirmar cuando las primeras están empatadas.
@@ -738,6 +750,50 @@ function canvasFromImage(image) {
   const ctx = canvas.getContext('2d');
   ctx.putImageData(new ImageData(image.data, image.width, image.height), 0, 0);
   return canvas;
+}
+
+// El 109/196 está bajo el ilustrador, no en la barra de Debilidad.
+// Varias franjas porque el enderezado mueve esa línea unos puntos.
+const NUMBER_WINDOWS = [
+  [0.04, 0.94, 0.36, 0.06],
+  [0.14, 0.935, 0.26, 0.055],
+  [0.15, 0.948, 0.24, 0.045],
+  [0.08, 0.91, 0.34, 0.06],
+];
+
+/** Escala la franja y estira el contraste. Un umbral duro convierte el 9 en 0. */
+function prepareNumberCanvas(image) {
+  const src = canvasFromImage(image);
+  const scale = 5;
+  const big = document.createElement('canvas');
+  big.width = Math.max(1, image.width * scale);
+  big.height = Math.max(1, image.height * scale);
+  const ctx = big.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(src, 0, 0, big.width, big.height);
+  const id = ctx.getImageData(0, 0, big.width, big.height);
+  const d = id.data;
+  let min = 255;
+  let max = 0;
+  const gray = new Uint8Array(d.length / 4);
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    const v = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+    gray[p] = v;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  const span = Math.max(1, max - min);
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    const v = Math.round((gray[p] - min) * 255 / span);
+    d[i] = v;
+    d[i + 1] = v;
+    d[i + 2] = v;
+  }
+  ctx.putImageData(id, 0, 0);
+  return big;
+}
+
+function textHasFraction(text) {
+  return /\d{2,3}\s*\/\s*\d{2,3}/.test(String(text || ''));
 }
 
 export async function recognize(canvas, hooks = {}) {
@@ -761,10 +817,21 @@ export async function recognize(canvas, hooks = {}) {
     return { ok: false, message: 'No veo el borde de la carta.', diag: 'borde no' };
   }
   let ocrText = '';
+  let ocrIds = [];
   if (bordered && hooks.ocr) {
-    const number = cropFraction(canonical, 0, 0.86, 0.46, 0.11);
-    try { ocrText = await hooks.ocr(canvasFromImage(number)) || ''; }
-    catch { ocrText = ''; }
+    for (const band of NUMBER_WINDOWS) {
+      const number = cropFraction(canonical, band[0], band[1], band[2], band[3]);
+      let text = '';
+      try { text = await hooks.ocr(prepareNumberCanvas(number)) || ''; }
+      catch { text = ''; }
+      if (!text.trim()) continue;
+      ocrText = text;
+      if (hooks.ocrIds && textHasFraction(text)) {
+        try { ocrIds = await hooks.ocrIds(text) || []; }
+        catch { ocrIds = []; }
+        if (ocrIds.length) break;
+      }
+    }
   }
   let top = [];
   let model = false;
@@ -783,7 +850,10 @@ export async function recognize(canvas, hooks = {}) {
     top = await phashTop(canonical);
     model = false;
   }
-  const ocrIds = hooks.ocrIds ? await hooks.ocrIds(ocrText) : [];
+  if (!ocrIds.length && ocrText && hooks.ocrIds) {
+    try { ocrIds = await hooks.ocrIds(ocrText) || []; }
+    catch { ocrIds = []; }
+  }
   const decision = decideMatch({ top, bordered, model, ocrIds });
   const ms = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - started);
   const best = top[0];
