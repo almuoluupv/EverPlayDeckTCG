@@ -407,7 +407,7 @@ export function axisAlignedCard(image) {
   }
   const boxW = (x1 - x0) / scale;
   const boxH = (y1 - y0) / scale;
-  if (boxW * boxH < image.width * image.height * 0.28) return null;
+  if (boxW * boxH < image.width * image.height * 0.1) return null;
   const left = x0 / scale;
   const top = y0 / scale;
   const right = x1 / scale;
@@ -518,7 +518,15 @@ function loadIndex() {
         if (art.length === idsRes.length * artDim) artBytes = art;
       }
     }
-    return { manifest, ids: idsRes, bytes, artBytes, artDim };
+    let bodyBytes = null;
+    if (manifest.bodyRgbFile) {
+      const bodyRes = await fetch('./' + manifest.bodyRgbFile);
+      if (bodyRes.ok) {
+        const body = new Uint8Array(await bodyRes.arrayBuffer());
+        if (body.length === idsRes.length * 3) bodyBytes = body;
+      }
+    }
+    return { manifest, ids: idsRes, bytes, artBytes, artDim, bodyBytes };
   })();
   return indexPromise;
 }
@@ -610,7 +618,7 @@ function unitQuery(query, dim) {
  * cuando la foto es de un teléfono. La rejilla de color del dibujo separa
  * esa foto; el embedding solo desempata.
  */
-export function searchFused(embedQuery, embedBytes, artQuery, artBytes, ids, embedDim = EMBED_DIM, artDim = ART_DIM, limit = 8) {
+export function searchFused(embedQuery, embedBytes, artQuery, artBytes, ids, embedDim = EMBED_DIM, artDim = ART_DIM, limit = 8, ink = null) {
   const n = ids.length;
   const eq = unitQuery(embedQuery, embedDim);
   const aq = artQuery && artBytes ? unitQuery(artQuery, artDim) : null;
@@ -636,9 +644,69 @@ export function searchFused(embedQuery, embedBytes, artQuery, artBytes, ids, emb
       art = adot / 127;
       score = art + 0.05 * embed;
     }
+    if (ink && ink.hue != null && ink.bytes) {
+      const r = ink.bytes[row * 3];
+      const g = ink.bytes[row * 3 + 1];
+      const b = ink.bytes[row * 3 + 2];
+      const cardHue = hueOf(r, g, b);
+      if (cardHue != null) {
+        let dh = Math.abs(ink.hue - cardHue);
+        if (dh > 180) dh = 360 - dh;
+        // Un marco amarillo no puede empatar con una carta azul.
+        score -= 0.9 * (dh / 180);
+      }
+    }
     consider({ id: ids[row], score, embed, art });
   }
   return best;
+}
+
+function hueOf(r, g, b) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  if (d < 18) return null;
+  let h;
+  if (max === r) h = ((g - b) / d) % 6;
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  h *= 60;
+  if (h < 0) h += 360;
+  return h;
+}
+
+function saturatedRgb(image) {
+  let sr = 0;
+  let sg = 0;
+  let sb = 0;
+  let n = 0;
+  const step = Math.max(1, Math.floor(Math.sqrt((image.width * image.height) / 4000)));
+  for (let y = 0; y < image.height; y += step) {
+    for (let x = 0; x < image.width; x += step) {
+      const i = (y * image.width + x) * 4;
+      const r = image.data[i];
+      const g = image.data[i + 1];
+      const b = image.data[i + 2];
+      if (Math.max(r, g, b) - Math.min(r, g, b) < 28) continue;
+      if (0.299 * r + 0.587 * g + 0.114 * b < 40) continue;
+      sr += r;
+      sg += g;
+      sb += b;
+      n++;
+    }
+  }
+  if (n < 8) return null;
+  return [sr / n, sg / n, sb / n];
+}
+
+/** Grados entre dos colores. null si alguno es gris. */
+export function hueDistance(a, b) {
+  const ha = hueOf(a[0], a[1], a[2]);
+  const hb = hueOf(b[0], b[1], b[2]);
+  if (ha == null || hb == null) return null;
+  let d = Math.abs(ha - hb);
+  if (d > 180) d = 360 - d;
+  return d;
 }
 
 function dct1d(sig) {
@@ -718,7 +786,8 @@ export function decideMatch({ top, bordered, model, ocrIds }) {
   const gap = best.score - (second ? second.score : 0);
   // El número impreso manda aunque el coseno de otra carta sea más alto.
   // Si hay varias con el mismo número, se queda la que mejor encaja en la imagen.
-  if (bordered && ocrIds && ocrIds.length) {
+  // El número manda aunque el detector de borde haya fallado.
+  if (ocrIds && ocrIds.length) {
     const scoreOf = (id) => {
       const row = top.find((item) => item.id === id);
       return row ? row.score : 0;
@@ -761,6 +830,12 @@ const NUMBER_WINDOWS = [
   [0.08, 0.91, 0.34, 0.06],
 ];
 
+const STRIP_WINDOWS = [
+  [0.25, 0.62, 0.35, 0.32],
+  [0.15, 0.55, 0.45, 0.4],
+  [0.05, 0.4, 0.55, 0.55],
+];
+
 /** Escala la franja y estira el contraste. Un umbral duro convierte el 9 en 0. */
 function prepareNumberCanvas(image) {
   const src = canvasFromImage(image);
@@ -796,6 +871,120 @@ function textHasFraction(text) {
   return /\d{2,3}\s*\/\s*\d{2,3}/.test(String(text || ''));
 }
 
+function cropRect(image, quad) {
+  const left = Math.max(0, Math.floor(Math.min(quad[0].x, quad[1].x, quad[2].x, quad[3].x)));
+  const top = Math.max(0, Math.floor(Math.min(quad[0].y, quad[1].y, quad[2].y, quad[3].y)));
+  const right = Math.min(image.width, Math.ceil(Math.max(quad[0].x, quad[1].x, quad[2].x, quad[3].x)));
+  const bottom = Math.min(image.height, Math.ceil(Math.max(quad[0].y, quad[1].y, quad[2].y, quad[3].y)));
+  const sw = Math.max(1, right - left);
+  const sh = Math.max(1, bottom - top);
+  const data = new Uint8ClampedArray(sw * sh * 4);
+  for (let row = 0; row < sh; row++) {
+    const src = ((top + row) * image.width + left) * 4;
+    data.set(image.data.subarray(src, src + sw * 4), row * sw * 4);
+  }
+  return { width: sw, height: sh, data };
+}
+
+/** Franjas de color anchas. Sirven para leer el número cuando el borde no cierra. */
+export function saturatedBands(image, limit = 2) {
+  const maxW = 320;
+  const scale = Math.min(1, maxW / image.width);
+  const w = Math.max(8, Math.round(image.width * scale));
+  const h = Math.max(8, Math.round(image.height * scale));
+  const mask = new Uint8Array(w * h);
+  const { data } = image;
+  for (let y = 0; y < h; y++) {
+    const sy = Math.min(image.height - 1, Math.floor((y + 0.5) * image.height / h));
+    for (let x = 0; x < w; x++) {
+      const sx = Math.min(image.width - 1, Math.floor((x + 0.5) * image.width / w));
+      const i = (sy * image.width + sx) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+      if (luma > 40 && Math.max(r, g, b) - Math.min(r, g, b) > 28) mask[y * w + x] = 1;
+    }
+  }
+  const seen = new Uint8Array(w * h);
+  const stack = [];
+  const blobs = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const start = y * w + x;
+      if (!mask[start] || seen[start]) continue;
+      stack.push(start);
+      seen[start] = 1;
+      let count = 0;
+      let minX = x;
+      let maxX = x;
+      let minY = y;
+      let maxY = y;
+      let sr = 0;
+      let sg = 0;
+      let sb = 0;
+      while (stack.length) {
+        const p = stack.pop();
+        const cx = p % w;
+        const cy = (p - cx) / w;
+        count++;
+        if (cx < minX) minX = cx;
+        if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy;
+        if (cy > maxY) maxY = cy;
+        const sx = Math.min(image.width - 1, Math.floor((cx + 0.5) * image.width / w));
+        const sy = Math.min(image.height - 1, Math.floor((cy + 0.5) * image.height / h));
+        const i = (sy * image.width + sx) * 4;
+        sr += data[i];
+        sg += data[i + 1];
+        sb += data[i + 2];
+        const neighbors = [p - 1, p + 1, p - w, p + w];
+        for (let n = 0; n < 4; n++) {
+          const np = neighbors[n];
+          if (n === 0 && cx === 0) continue;
+          if (n === 1 && cx === w - 1) continue;
+          if (np < 0 || np >= mask.length || !mask[np] || seen[np]) continue;
+          seen[np] = 1;
+          stack.push(np);
+        }
+      }
+      const bw = maxX - minX + 1;
+      if (count < w * h * 0.015 || bw < w * 0.35) continue;
+      blobs.push({
+        count,
+        rgb: [sr / count, sg / count, sb / count],
+        quad: [
+          { x: minX / scale, y: minY / scale },
+          { x: (maxX + 1) / scale, y: minY / scale },
+          { x: (maxX + 1) / scale, y: (maxY + 1) / scale },
+          { x: minX / scale, y: (maxY + 1) / scale },
+        ],
+      });
+    }
+  }
+  blobs.sort((a, b) => b.count - a.count);
+  return blobs.slice(0, limit);
+}
+
+async function readNumber(image, windows, hooks) {
+  let ocrText = '';
+  let ocrIds = [];
+  for (const band of windows) {
+    const number = cropFraction(image, band[0], band[1], band[2], band[3]);
+    let text = '';
+    try { text = await hooks.ocr(prepareNumberCanvas(number)) || ''; }
+    catch { text = ''; }
+    if (!text.trim()) continue;
+    ocrText = text;
+    if (hooks.ocrIds && textHasFraction(text)) {
+      try { ocrIds = await hooks.ocrIds(text) || []; }
+      catch { ocrIds = []; }
+      if (ocrIds.length) return { ocrText, ocrIds };
+    }
+  }
+  return { ocrText, ocrIds };
+}
+
 export async function recognize(canvas, hooks = {}) {
   const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const image = {
@@ -816,23 +1005,30 @@ export async function recognize(canvas, hooks = {}) {
   if (!canonical) {
     return { ok: false, message: 'No veo el borde de la carta.', diag: 'borde no' };
   }
+  const bands = saturatedBands(image);
+  let inkRgb = null;
   let ocrText = '';
   let ocrIds = [];
-  if (bordered && hooks.ocr) {
-    for (const band of NUMBER_WINDOWS) {
-      const number = cropFraction(canonical, band[0], band[1], band[2], band[3]);
-      let text = '';
-      try { text = await hooks.ocr(prepareNumberCanvas(number)) || ''; }
-      catch { text = ''; }
-      if (!text.trim()) continue;
-      ocrText = text;
-      if (hooks.ocrIds && textHasFraction(text)) {
-        try { ocrIds = await hooks.ocrIds(text) || []; }
-        catch { ocrIds = []; }
-        if (ocrIds.length) break;
+  if (hooks.ocr) {
+    if (bordered) {
+      const read = await readNumber(canonical, NUMBER_WINDOWS, hooks);
+      ocrText = read.ocrText;
+      ocrIds = read.ocrIds;
+      inkRgb = saturatedRgb(cropFraction(canonical, 0.06, 0.55, 0.88, 0.32));
+    }
+    if (!ocrIds.length) {
+      for (const band of bands) {
+        const read = await readNumber(cropRect(image, band.quad), STRIP_WINDOWS, hooks);
+        if (read.ocrText) ocrText = read.ocrText;
+        if (read.ocrIds.length) {
+          ocrIds = read.ocrIds;
+          inkRgb = band.rgb;
+          break;
+        }
       }
     }
   }
+  if (!inkRgb && bands.length) inkRgb = bands[0].rgb;
   let top = [];
   let model = false;
   let modelError = '';
@@ -843,21 +1039,24 @@ export async function recognize(canvas, hooks = {}) {
     const raw = await embedWithWorker(tensor);
     const index = await loadIndex();
     const art = bordered ? artVector(canonical) : null;
-    top = searchFused(raw, index.bytes, art, index.artBytes, index.ids, EMBED_DIM, index.artDim);
+    const hue = inkRgb ? hueOf(inkRgb[0], inkRgb[1], inkRgb[2]) : null;
+    const ink = hue != null && index.bodyBytes ? { hue, bytes: index.bodyBytes } : null;
+    top = searchFused(raw, index.bytes, art, index.artBytes, index.ids, EMBED_DIM, index.artDim, 8, ink);
     model = true;
   } catch (err) {
     modelError = err && err.message ? err.message : 'sin modelo';
     top = await phashTop(canonical);
     model = false;
   }
-  if (!ocrIds.length && ocrText && hooks.ocrIds) {
-    try { ocrIds = await hooks.ocrIds(ocrText) || []; }
-    catch { ocrIds = []; }
-  }
   const decision = decideMatch({ top, bordered, model, ocrIds });
+  if (decision.pendingId) {
+    const hit = top.find((row) => row.id === decision.pendingId);
+    const row = hit || { id: decision.pendingId, score: null };
+    top = [row, ...top.filter((item) => item.id !== decision.pendingId)];
+  }
   const ms = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - started);
   const best = top[0];
-  const scoreText = !best ? '—' : (model ? best.score.toFixed(2) : `d=${best.distance}`);
+  const scoreText = !best || best.score == null ? '—' : (model ? best.score.toFixed(2) : `d=${best.distance}`);
   const diag = [
     perspective ? 'borde sí' : (bordered ? 'carta a sangre' : 'borde no'),
     `${ms} ms`,
@@ -894,6 +1093,7 @@ export const NewScan = {
   searchTop,
   searchFused,
   axisAlignedCard,
+  saturatedBands,
   artVector,
   decideMatch,
   phashFromRgba,

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateFrame, detectQuad, warpCanonical, axisAlignedCard, decideMatch, searchTop } from '../scanner/new-scan.js';
+import { validateFrame, detectQuad, warpCanonical, axisAlignedCard, decideMatch, searchTop, hueDistance } from '../scanner/new-scan.js';
 
 function image(width, height, paint) {
   const data = new Uint8ClampedArray(width * height * 4);
@@ -84,6 +84,18 @@ test('no confirma sin margen y nunca añade sola', () => {
   assert.equal(byNumber.pendingId, 'swsh11-109');
   assert.equal(byNumber.suggestionIds[0], 'sm8-228');
   assert.match(byNumber.message, /número/);
+  const withoutBorder = decideMatch({
+    top: [{ id: 'sv03-047', score: 0.95 }],
+    bordered: false,
+    model: true,
+    ocrIds: ['swsh11-109'],
+  });
+  assert.equal(withoutBorder.pendingId, 'swsh11-109');
+  const yellow = [99, 80, 59];
+  const rockruff = [211, 141, 48];
+  const sharpedo = [128, 198, 226];
+  assert.ok(hueDistance(yellow, rockruff) < 40);
+  assert.ok(hueDistance(yellow, sharpedo) > 90);
 });
 
 test('una carta a sangre se toma como la carta, no como un recorte', () => {

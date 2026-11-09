@@ -23,5 +23,6 @@
   "artGrid": [
     8,
     10
-  ]
+  ],
+  "bodyRgbFile": "data/body-rgb.bin"
 }
